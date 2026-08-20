@@ -4,7 +4,6 @@ const mysql = require('mysql2/promise');
 const path = require('path');
 const fsp = require('fs').promises;
 
-
 function quoteIdentifier(value){
     return '`' + String(value).replace(/`/g, '``') + '`';
 }
@@ -177,6 +176,9 @@ async function repairWeaponShopRows(ids, host, user, pass, db){
 
         for(const id of ids){
             const defaults = getWeaponDbDefaults(id);
+            const grupos = await resolveShopGroups(conexion, id, defaults.priceGroupId, defaults.effectGroupId);
+            defaults.priceGroupId = grupos.priceGroupId;
+            defaults.effectGroupId = grupos.effectGroupId;
 
             if(infoColumns.has('pricegroupid') && infoColumns.has('effectgroupid')){
                 const sets = ['`PriceGroupId` = ?', '`EffectGroupId` = ?'];
@@ -281,7 +283,61 @@ async function shopItemExists(id, host, user, pass, db){
     }
 }
 
+async function detectDbFormat(conexion){
+    const infoColumns = (await getColumns(conexion, 'shop_iteminfos')).map(column => column.toLowerCase());
+    if(infoColumns.includes('isenabled')) return 's1';
+    if(infoColumns.includes('type')) return 's10';
+    return null;
+}
 
+async function findSiblingShopInfo(conexion, id){
+    const start = Math.floor(Number(id) / 10000) * 10000;
+    const [rows] = await conexion.query(
+        `SELECT ${quoteIdentifier('PriceGroupId')}, ${quoteIdentifier('EffectGroupId')}
+         FROM ${quoteIdentifier('shop_iteminfos')}
+         WHERE ${quoteIdentifier('ShopItemId')} >= ? AND ${quoteIdentifier('ShopItemId')} < ?
+         ORDER BY ${quoteIdentifier('ShopItemId')} DESC LIMIT 1`,
+        [start, start + 10000]
+    );
+
+    if(rows.length){
+        return rows[0];
+    }
+
+    const [common] = await conexion.query(
+        `SELECT ${quoteIdentifier('PriceGroupId')}, ${quoteIdentifier('EffectGroupId')}
+         FROM ${quoteIdentifier('shop_iteminfos')}
+         GROUP BY ${quoteIdentifier('PriceGroupId')}, ${quoteIdentifier('EffectGroupId')}
+         ORDER BY COUNT(*) DESC LIMIT 1`
+    );
+
+    return common.length ? common[0] : null;
+}
+
+async function resolveShopGroups(conexion, id, priceGroupId, effectGroupId){
+    const existe = async (table, value) => {
+        if(value == null) return false;
+        const [rows] = await conexion.query(
+            `SELECT ${quoteIdentifier('Id')} FROM ${quoteIdentifier(table)} WHERE ${quoteIdentifier('Id')} = ? LIMIT 1`,
+            [value]
+        );
+        return rows.length > 0;
+    };
+
+    const priceOk = await existe('shop_price_groups', priceGroupId);
+    const effectOk = await existe('shop_effect_groups', effectGroupId);
+
+    if(priceOk && effectOk){
+        return { priceGroupId, effectGroupId };
+    }
+
+    const sibling = await findSiblingShopInfo(conexion, id);
+
+    return {
+        priceGroupId: priceOk ? priceGroupId : (sibling ? sibling.PriceGroupId : priceGroupId),
+        effectGroupId: effectOk ? effectGroupId : (sibling ? sibling.EffectGroupId : effectGroupId)
+    };
+}
 
 async function addtodb(id, name, host, user, pass, db, dbIds, weaType, options = {}){
     let conexion;
@@ -297,7 +353,13 @@ async function addtodb(id, name, host, user, pass, db, dbIds, weaType, options =
         database: db
     });
 
- 
+    if(options.clientFormat){
+        const dbFormat = await detectDbFormat(conexion);
+        if(dbFormat && dbFormat !== options.clientFormat){
+            const nombres = { s1: 'Season 1', s10: 'S8/S10' };
+            throw new Error(`el cliente es ${nombres[options.clientFormat]} y la base "${db}" es ${nombres[dbFormat]}`);
+        }
+    }
 
     if(!dbIds){
         const itemInfoColumns = await getColumns(conexion, 'shop_iteminfos');
@@ -314,15 +376,11 @@ async function addtodb(id, name, host, user, pass, db, dbIds, weaType, options =
 
     await conexion.beginTransaction();
     const defaults = getShopDbDefaults(id, weaType, options);
-    
-    await insertExisting(conexion, 'shop_iteminfos', {
-        ShopItemId: id,
-        PriceGroupId: defaults.priceGroupId,
-        EffectGroupId: defaults.effectGroupId,
-        DiscountPercentage: defaults.discountPercentage,
-        Type: defaults.type
-    });
 
+    const grupos = await resolveShopGroups(conexion, id, defaults.priceGroupId, defaults.effectGroupId);
+    defaults.priceGroupId = grupos.priceGroupId;
+    defaults.effectGroupId = grupos.effectGroupId;
+    
     await insertExisting(conexion, 'shop_items', {
         Id: id,
         id,
@@ -340,6 +398,15 @@ async function addtodb(id, name, host, user, pass, db, dbIds, weaType, options =
         RepairCost: null
     });
 
+    await insertExisting(conexion, 'shop_iteminfos', {
+        ShopItemId: id,
+        PriceGroupId: defaults.priceGroupId,
+        EffectGroupId: defaults.effectGroupId,
+        DiscountPercentage: defaults.discountPercentage,
+        Type: defaults.type,
+        IsEnabled: 1
+    });
+
     await conexion.commit();
     if(dbIds){
         dbIds.add(Number(id));
@@ -350,6 +417,7 @@ async function addtodb(id, name, host, user, pass, db, dbIds, weaType, options =
 
     } catch(e){
 
+      console.error('No se pudo agregar a la base:', e.message);
       try {
         await conexion.rollback();
         return [false, 2];
@@ -363,4 +431,4 @@ async function addtodb(id, name, host, user, pass, db, dbIds, weaType, options =
     }
 }
 
-module.exports = { addtodb, loadDbItemIds, repairWeaponShopRows, updateShopItemColors, shopItemExists };
+module.exports = { addtodb, detectDbFormat, loadDbItemIds, repairWeaponShopRows, updateShopItemColors, shopItemExists };

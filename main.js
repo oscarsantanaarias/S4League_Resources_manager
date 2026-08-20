@@ -32,10 +32,11 @@ const fsp = require('fs').promises;
 const mysql = require('mysql2/promise');
 const { getDirectories, ensureDefaultResourceDirectories, asegurarCarpetaMapaLibre, fs, path } = require('./src/utils/directory');
 const { makeItemx7, makeCostumeItemx7, makeWeaponLua } = require('./src/builders/makeFile');
+const itemS1 = require('./src/builders/itemS1');
 const weaponsxml_funcs = require('./src/builders/makeWeaponXML');
 const { BrowserWindow, Menu, dialog, ipcMain, shell } = require('electron');
 const weapons_lua = require('./src/utils/weapon_lua_func');
-const {setVerifierPaths, verifyFields, verifyItemX7, verifyInfox7, verifyWeaponLua, verifyWeaponsXML , verifyItem_xml, weaponlua, iteminfox7, weaponxml, itemx7, itemxml,  melee, special, sentries, guns, snipers, heavies, thrown, id_range, verifyString_tableXML, verifyString_tablex7, iteminfoStringX7, iteminfoStringXML } = require('./src/utils/verifiers');
+const {setVerifierPaths, verifyFields, verifyItemX7, verifyInfox7, verifyWeaponLua, verifyWeaponsXML , verifyItem_xml, weaponlua, iteminfox7, weaponxml, weaponx7, itemx7, itemxml,  melee, special, sentries, guns, snipers, heavies, thrown, id_range, verifyString_tableXML, verifyString_tablex7, iteminfoStringX7, iteminfoStringXML } = require('./src/utils/verifiers');
 const { read } = require('fs');
 const { MakeTurrentDesc, MakeSubmachineDesc, MakeSparkRifleDesc,MakeBreakerDesc, MakeSmashDesc, MakeShotGunDesc, MakeSharpshootingDesc, MakeSentryStunDesc, MakeSentryGunDesc, MakeSemiRifleDesc, MakeRailGunDesc, MakeRocketLauncherDesc, 
 MakeRevolverDesc, MakeRescueGunDesc, MakeMineGunDesc, MakeMindShockDesc, MakeMindHealDesc, MakeLightMachineGunDesc, MakeLightBombDesc, MakeHomingDesc, MakeHeavyMachineGunDesc, MakeHandGunDesc, MakeGaussDesc, MakeEarthBombDesc, MakeDualMagnumDesc, MakeCannonDesc, MakeAssaultDesc, MakeAirGunDesc, MakeVitalClawDesc, MakeTwinBladesDesc, MakeSigmaBladeDesc, MakeKatanaDesc, MakeIronBootsDesc, MakeFistDesc, MakeExoDesc, MakeDaggerDesc, MakeBatDesc, MakeCounterSwordDesc, MakePlasmaSwordDesc } = require('./src/builders/makeItemInfo');
@@ -104,7 +105,7 @@ let resourceCache = {
 };
 
 const openedResourceTemps = new Map();
-const defaultFilePaths = { itemx7, itemxml, weaponlua, weaponxml, iteminfox7, iteminfoStringX7, iteminfoStringXML };
+const defaultFilePaths = { itemx7, itemxml, weaponlua, weaponxml, weaponx7, iteminfox7, iteminfoStringX7, iteminfoStringXML };
 let activeFilePaths = { ...defaultFilePaths };
 let activePreviewRoot = null;
 let skipWeaponsXml = false;
@@ -237,7 +238,23 @@ async function readUiInspectorSnapshot(){
 
 function setActiveFilePaths(paths){
   activeFilePaths = { ...defaultFilePaths, ...paths };
+  clientFormatCache = null;
   setVerifierPaths(activeFilePaths);
+}
+
+let clientFormatCache = null;
+
+async function getClientFormat(){
+  if(clientFormatCache) return clientFormatCache;
+
+  try {
+    const data = await fsp.readFile(activeFilePaths.iteminfox7, 'utf8');
+    clientFormatCache = itemS1.detectFormat(data) === 's1' ? 's1' : 's10';
+  } catch(e){
+    clientFormatCache = 's10';
+  }
+
+  return clientFormatCache;
 }
 
 function resetActiveFilePaths(){
@@ -303,6 +320,16 @@ async function hydrateProcessedPreviewImages(items){
 }
 
 async function findExistingItemIdByName(weaName){
+  if(await getClientFormat() === 's1'){
+    try {
+      const data = await fsp.readFile(activeFilePaths.iteminfox7, 'utf8');
+      const match = data.match(new RegExp(`<item[^>]*NAME="${escapeRegExp(weaName)}"[^>]*>[\\s\\S]*?name_key="N(\\d+)"`, 'i'));
+      return match ? Number(match[1]) : null;
+    } catch(e){
+      return null;
+    }
+  }
+
   const files = [activeFilePaths.itemx7, activeFilePaths.itemxml];
 
   for(const file of files){
@@ -336,7 +363,7 @@ async function syncSkippedItemToDb(id, final, weaName, weaType, weaponName, item
     return dbId;
   }
 
-  const resAddDb = await addtodb(dbId, weaName, host, user, pass, db, dbRunIds, weaType);
+  const resAddDb = await addtodb(dbId, weaName, host, user, pass, db, dbRunIds, weaType, { clientFormat: await getClientFormat() });
 
   if(resAddDb === true){
     itemAdded = true;
@@ -347,11 +374,18 @@ async function syncSkippedItemToDb(id, final, weaName, weaType, weaponName, item
   return dbId;
 }
 
+async function verifyItemS1(id, weaName){
+  const data = await fsp.readFile(activeFilePaths.iteminfox7, 'utf8');
+
+  if(new RegExp(`NAME="${escapeRegExp(weaName)}"`).test(data)){
+    return [false, 0];
+  }
+
+  return itemS1.hasItem(data, id) ? false : id;
+}
+
 async function addNewItem(id, final, item_scn, item_dds, iteminfoID, weaType, imgsrc, weaponName, host, user, pass, db){
     
- 
-
-   
  if(id > final) {
         console.error(`ID ${id} is out of range ${final} for weapon type: ${weaType}.`);
         return; 
@@ -359,13 +393,13 @@ async function addNewItem(id, final, item_scn, item_dds, iteminfoID, weaType, im
  
     try {
 
-        
         const weaName = item_scn.split('.')[0].replace(/icon_/g, '').replace(/_/g, ' ').replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
         
-        
-        const resItemX7 = await verifyItemX7(id, weaName);
+        const s1Mode = await getClientFormat() === 's1';
 
-         const resItemXML = await verifyItem_xml(id, weaType);
+        const resItemX7 = s1Mode ? await verifyItemS1(id, weaName) : await verifyItemX7(id, weaName);
+
+         const resItemXML = s1Mode ? id : await verifyItem_xml(id, weaType);
 
         const resWeaponlua = await verifyWeaponLua(id, weaType); 
         
@@ -376,15 +410,8 @@ async function addNewItem(id, final, item_scn, item_dds, iteminfoID, weaType, im
         const resItemInfoStringX7 = await verifyString_tablex7(nameID, tipID, weaName);
         const resItemInfoStringXML = await verifyString_tableXML(nameID, tipID, weaName);
 
-        
-        
         let resAddDb;
  
-      
-       
-        
-   
-            
   if (resItemInfo === 'nombreEncontrado' || resItemInfoStringX7 === 'nombreEncontrado' || resItemInfoStringXML === 'nombreEncontrado' ){
   const dbId = await syncSkippedItemToDb(id, final, weaName, weaType, weaponName, item_dds, host, user, pass, db);
   pushProcessedItem(dbId, weaName, 'Skipped', weaponName, weaType, item_dds);
@@ -398,15 +425,11 @@ else if(!resItemInfo){
 
         } else if(Array.isArray(resItemInfo) && !resItemInfo[0]){
 
-          
             tipID += 1;
 
               return await addNewItem(id, final, item_scn, item_dds, iteminfoID, weaType, imgsrc, weaponName, host, user, pass, db);
         }
  
-      
-
-        
       if(!resItemX7){
       
         return await addNewItem(id + 1, final, item_scn, item_dds, iteminfoID, weaType, imgsrc, weaponName, host, user, pass, db)
@@ -417,8 +440,6 @@ else if(!resItemInfo){
 
       }
      
-      
-      
      if(!resWeaponXML){
         return await addNewItem(id + 1, final, item_scn, item_dds, iteminfoID, weaType, imgsrc, weaponName, host, user, pass, db)
       } else if(Array.isArray(resWeaponXML)){
@@ -428,7 +449,6 @@ else if(!resItemInfo){
 
       }
 
-        
         if(!resItemXML){
             
         return await addNewItem(id + 1, final, item_scn, item_dds, iteminfoID, weaType, imgsrc, weaponName, host, user, pass, db)
@@ -439,22 +459,17 @@ else if(!resItemInfo){
 
       }
 
-      
         if(!resWeaponlua){
         return await addNewItem(id + 1, final, item_scn, item_dds, iteminfoID, weaType, imgsrc, weaponName, host, user, pass, db)
       } 
 
-      
       if(useDB){
 
-       
         if(dbRunIds && dbRunIds.has(Number(id))){
           return await addNewItem(id + 1, final, item_scn, item_dds, iteminfoID, weaType, imgsrc, weaponName, host, user, pass, db)
         }
 
-        resAddDb = await addtodb(id, weaName, host, user, pass, db, dbRunIds, weaType);
-        
-
+        resAddDb = await addtodb(id, weaName, host, user, pass, db, dbRunIds, weaType, { clientFormat: await getClientFormat() });
         
       if(resAddDb === 2){
         return await addNewItem(id + 1, final, item_scn, item_dds, iteminfoID, weaType, imgsrc, weaponName, host, user, pass, db)
@@ -466,82 +481,80 @@ else if(!resItemInfo){
         return;
       }
 
-     
-
     }
 
-      
+      if(await getClientFormat() === 's1'){
+        await appendWeaponItemS1(id, weaName, weaType, item_scn, item_dds);
+      } else {
+        const readItemx7 = await fsp.readFile(activeFilePaths.itemx7, 'utf8');
         
-      const readItemx7 = await fsp.readFile(activeFilePaths.itemx7, 'utf8');
-      
-      
-        let modifyItemX7 = readItemx7.replace(/<\/itemlist>\s*$/, await makeItemx7(id, item_dds, weaName, nameID, tipID, weaType) + '</itemlist>');
-        
-      
-        if(!modifyItemX7 || modifyItemX7  === '' || modifyItemX7.length === 0){
-        let newItemX7 = await makeItemx7(id, item_dds, weaName, nameID, tipID, weaType);
-            modifyItemX7 = `
+          let modifyItemX7 = readItemx7.replace(/<\/itemlist>\s*$/, await makeItemx7(id, item_dds, weaName, nameID, tipID, weaType) + '</itemlist>');
+          
+          if(!modifyItemX7 || modifyItemX7  === '' || modifyItemX7.length === 0){
+          let newItemX7 = await makeItemx7(id, item_dds, weaName, nameID, tipID, weaType);
+              modifyItemX7 = `
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <itemlist>
-        ${newItemX7}
+      ${newItemX7}
 </itemlist>
             `;
-        }
+          }
 
-        await fsp.writeFile(activeFilePaths.itemx7, modifyItemX7, 'utf8');
+          await fsp.writeFile(activeFilePaths.itemx7, modifyItemX7, 'utf8');
 
-               
-      const readItemXML = await fsp.readFile(activeFilePaths.itemxml, 'utf8');
-    
-        let modifyItemXML = readItemXML.replace(/<\/itemlist>\s*$/, await makeItemx7(id, item_dds, weaName, nameID, tipID, weaType) + '</itemlist>');
+        const readItemXML = await fsp.readFile(activeFilePaths.itemxml, 'utf8');
       
-      
-        if(!modifyItemXML || modifyItemXML === '' || modifyItemXML.length === 0){
-        let newItemXML = await makeItemx7(id, item_dds, weaName, nameID, tipID, weaType);
-            modifyItemXML = `
+          let modifyItemXML = readItemXML.replace(/<\/itemlist>\s*$/, await makeItemx7(id, item_dds, weaName, nameID, tipID, weaType) + '</itemlist>');
+        
+          if(!modifyItemXML || modifyItemXML === '' || modifyItemXML.length === 0){
+          let newItemXML = await makeItemx7(id, item_dds, weaName, nameID, tipID, weaType);
+              modifyItemXML = `
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <itemlist>
-        ${newItemXML}
+      ${newItemXML}
 </itemlist>
             `;
-        }
+          }
 
-        await fsp.writeFile(activeFilePaths.itemxml, modifyItemXML, 'utf8');
-      
-
+          await fsp.writeFile(activeFilePaths.itemxml, modifyItemXML, 'utf8');
         
-        const readItemInfo = await fsp.readFile(activeFilePaths.iteminfox7, 'utf8');
+          const readItemInfo = await fsp.readFile(activeFilePaths.iteminfox7, 'utf8');
 
-        const itemInfoFuncs = require('./src/builders/makeItemInfo');
+          const itemInfoFuncs = require('./src/builders/makeItemInfo');
 
-        const buildMakeInfo = 'Make' + weaType + 'Desc';
+          const buildMakeInfo = 'Make' + weaType + 'Desc';
 
-         const callBuildInfo = itemInfoFuncs[buildMakeInfo];
+           const callBuildInfo = itemInfoFuncs[buildMakeInfo];
 
-         if(!callBuildInfo){
-            return console.error('Call function does not exist.');
-         }
+           if(!callBuildInfo){
+              return console.error('Call function does not exist.');
+           }
 
-         const newItemInfoDesc = callBuildInfo(nameID, tipID, weaName);
-         
+           const newItemInfoDesc = callBuildInfo(nameID, tipID, weaName);
+           
+     let replaceItemInfo = readItemInfo.replace(`</string_table>`, `${newItemInfoDesc.NameDesc}` + `\n \t` + `\n \t` + `${newItemInfoDesc.TipDesc}` + `\n </string_table>`);
 
-   let replaceItemInfo = readItemInfo.replace(`</string_table>`, `${newItemInfoDesc.NameDesc}` + `\n \t` + `\n \t` + `${newItemInfoDesc.TipDesc}` + `\n </string_table>`);
-
-            if(!replaceItemInfo || replaceItemInfo === '' || replaceItemInfo.length === 0){
-                replaceItemInfo = `
+              if(!replaceItemInfo || replaceItemInfo === '' || replaceItemInfo.length === 0){
+                  replaceItemInfo = `
 <string_table>
 
- \t ${newItemInfoDesc.NameDesc} \n 
+   \t ${newItemInfoDesc.NameDesc} \n 
 
- \t ${newItemInfoDesc.TipDesc}
+   \t ${newItemInfoDesc.TipDesc}
 
 </string_table> 
                 `;
-            }
+              }
 
-        await fsp.writeFile(activeFilePaths.iteminfox7, replaceItemInfo, 'utf8');
+          await fsp.writeFile(activeFilePaths.iteminfox7, replaceItemInfo, 'utf8');
+      }
 
- 
+      if(s1Mode){
+        const stringEntries = { id, ...buildCostumeStringEntries(id, weaName) };
+        await appendStringTable(activeFilePaths.iteminfoStringX7, stringEntries);
+        await appendStringTable(activeFilePaths.iteminfoStringXML, stringEntries);
+      } else {
+
         const readItemInfoStringX7 = await fsp.readFile(activeFilePaths.iteminfoStringX7, 'utf8');
 
         const itemInfoStringX7_Funcs = require('./src/builders/makeItemInfo');
@@ -556,7 +569,6 @@ else if(!resItemInfo){
 
          const newItemInfoStringX7Desc = callBuildInfoStringX7(nameID, tipID, weaName);
          
-
    let replaceItemInfoStringX7 = readItemInfoStringX7.replace(`</string_table>`, `${newItemInfoStringX7Desc.NameDesc}` + `\n \t` + `\n \t` + `${newItemInfoStringX7Desc.TipDesc}` + `\n </string_table>`);
 
             if(!replaceItemInfoStringX7 || replaceItemInfoStringX7 === '' || replaceItemInfoStringX7.length === 0){
@@ -573,7 +585,6 @@ else if(!resItemInfo){
 
         await fsp.writeFile(activeFilePaths.iteminfoStringX7, replaceItemInfoStringX7, 'utf8');
 
-  
         const readItemInfoStringXML = await fsp.readFile(activeFilePaths.iteminfoStringXML, 'utf8');
 
         const itemInfoStringXML_Funcs = require('./src/builders/makeItemInfo');
@@ -588,7 +599,6 @@ else if(!resItemInfo){
 
          const newItemInfoStringXMLDesc = callBuildInfoStringXML(nameID, tipID, weaName);
          
-
    let replaceItemInfoStringXML = readItemInfoStringXML.replace(`</string_table>`, `${newItemInfoStringXMLDesc.NameDesc}` + `\n \t` + `\n \t` + `${newItemInfoStringXMLDesc.TipDesc}` + `\n </string_table>`);
 
             if(!replaceItemInfoStringXML || replaceItemInfoStringXML === '' || replaceItemInfoStringXML.length === 0){
@@ -604,10 +614,8 @@ else if(!resItemInfo){
             }
 
         await fsp.writeFile(activeFilePaths.iteminfoStringXML, replaceItemInfoStringXML, 'utf8');       
+      }
 
-        
-        
-        
         const readWeaponlua = await fsp.readFile(activeFilePaths.weaponlua, 'utf8');
             const newLuaDesc = await makeWeaponLua(resWeaponlua, weaType);
           
@@ -624,18 +632,14 @@ else if(!resItemInfo){
 
         await fsp.writeFile(activeFilePaths.weaponlua, replaceInWeaponlua, 'utf8');
 
-  
      if(!skipWeaponsXml){
      const readWeaponXML = await fsp.readFile(activeFilePaths.weaponxml, 'utf8');
-
 
         const buildWeaponXML = weaponsxml_funcs['Make' + weaType + 'XML'];
 
         const callBuildWeaponXML = buildWeaponXML(id, item_scn, item_dds);
 
         let replaceWeaponXML = readWeaponXML.replace('</weaponlist>', callBuildWeaponXML + '</weaponlist>');
-
-
 
         if(!replaceWeaponXML || replaceWeaponXML.length === '' || replaceWeaponXML.length === 0){
             replaceWeaponXML = `
@@ -656,8 +660,6 @@ else if(!resItemInfo){
     
       pushProcessedItem(id, weaName, 'Added', weaponName, weaType, item_dds);
          
-        
-
     } catch(e){
         console.error(e); 
     }
@@ -682,19 +684,13 @@ async function Ejecutar(iteminfoID, weapon_files, host, user, pass, db){
     dbRunIds = await loadDbItemIds(host, user, pass, db);
   }
 
-    
     for(const [weaponName, weaponFiles] of Object.entries(weapon_files)){
            
-        
         for(const [weaType, weaFiles] of Object.entries(weaponFiles)){
             
-            
-
             const imgs = weaFiles.imgs;
             const models = weaFiles.model.sort();
          
-          
-          
             let inicio = null;
             let final = null;
             
@@ -741,11 +737,9 @@ async function Ejecutar(iteminfoID, weapon_files, host, user, pass, db){
              
                const imgsrc = 'resources/weapon/' + weaponName + '/' + weaType  + '/' + 'imgs/'+ imgs[i];
              
-             
                 const ele_icon = 'icon_' + elemento;
                 const ele_icono = 'Icon_' + elemento;
                 
-          
             for(let a = 0; a < imgs.length; a++){
 
                 if(imgs[a].length > 0){
@@ -823,7 +817,6 @@ async function Ejecutar(iteminfoID, weapon_files, host, user, pass, db){
   }
 }
 
-  
     if(useDB){
       const idsToRepair = [...new Set(procesados.map(item => Number(item.id)).filter(id => Number.isFinite(id)))];
       if(idsToRepair.length > 0){
@@ -857,7 +850,6 @@ async function Ejecutar(iteminfoID, weapon_files, host, user, pass, db){
     sqlError = false;
     itemAdded = false;
 
-     
 }
 
 const chokidar = require('chokidar');
@@ -907,7 +899,6 @@ ipcMain.handle('selectFolder', async() => {
 	const resultado = await dialog.showOpenDialog({
 		properties: ['openDirectory']
 	});
-	
 	
 	if(resultado.canceled) return null;
 	
@@ -1330,7 +1321,6 @@ ipcMain.handle('dirLocation', async (event, ruta) => {
 	weapon_files = resourcesRoot ? getDirectories(resourcesRoot).weapon : {};
 	weaponSourcePath = ruta;
 	
-
 	} else {	
 		 return null
 	}
@@ -2249,14 +2239,11 @@ function walkLooseEntries(root){
 function getResourceArchive(ruta, options = {}){
   const basePath = getResourceBase(ruta);
 
-  
   if(resourceCache.basePath === basePath && resourceCache.archive
      && !options.source && !options.lockKey && !options.key){
     return resourceCache.archive;
   }
 
-  
-  
   const resourceFile = path.join(basePath, 'resource.s4hd');
   const jsonPath = path.join(basePath, 'resources_index.json');
   const wantPacks = options.source === 'packs' || (!options.source && !fs.existsSync(resourceFile) && fs.existsSync(jsonPath));
@@ -2664,11 +2651,8 @@ ipcMain.handle('resourceBrowserOpenTemp', async (event, data) => {
 
     await fsp.mkdir(tempDir, { recursive: true });
     
-    
     await fsp.writeFile(output, previewOnly ? Buffer.from(textPreview, 'utf8') : decoded.data);
 
-    
-    
     const reimportable = !previewOnly && !archive.packMode;
     if(reimportable){
       try {
@@ -2769,7 +2753,6 @@ ipcMain.handle('resourceSaveText', async (event, data) => {
       return { ok: false, error: 'Selected resource is an image.' };
     }
 
-    
     const original = getDecodedResourceData(archive, entry);
     const enc = detectTextEncoding(original.data);
     writeResourceData(archive, entry.fullName, Buffer.from(data.text || '', enc));
@@ -2897,7 +2880,6 @@ ipcMain.handle('scnPreview3D', async (event, data) => {
     const base = path.posix.basename(entry.fullName);
     const bipMatch = base.match(/^(male|female)_bip\.scn$/i);
 
-    
     if(bipMatch){
       const gender = bipMatch[1].toLowerCase();
       const charFolder = path.posix.dirname(entry.fullName);
@@ -2916,7 +2898,6 @@ ipcMain.handle('scnPreview3D', async (event, data) => {
       
     }
 
-    
     const decoded = getDecodedResourceData(archive, entry);
     const parsed = parseScn(decoded.data);
     if(!parsed.meshes.length) return { ok: false, error: 'No mesh geometry found in this .scn.' };
@@ -2950,7 +2931,6 @@ async function previewSceneEngine(data, entry, deepKey){
         PREF.indexOf(a.fullName.split('.').pop().toLowerCase()) - PREF.indexOf(z.fullName.split('.').pop().toLowerCase()))[0];
     };
 
-    
     const toExtract = new Map();
     const addEntry = e => { if(e) toExtract.set(e.fullName.split('/').pop(), e); };
     addEntry(entry);
@@ -2971,8 +2951,6 @@ async function previewSceneEngine(data, entry, deepKey){
     await fsp.mkdir(outDir, { recursive: true });
     for(const [name, e] of toExtract){
       let buf = getDecodedResourceData(archive, e).data;
-      
-      
       
       if(/\.tga$/i.test(name)){
         try {
@@ -2997,7 +2975,6 @@ async function previewSceneEngine(data, entry, deepKey){
       try { srv && srv.close(); } catch(e) {}
       fsp.rm(tempRoot, { recursive: true, force: true }).catch(() => {});
     });
-    
     
     const shared = deepKey === 'scn' && /^resources\/model\//i.test(entry.fullName) ? '&shared=1' : '';
     await win.loadURL(`http://127.0.0.1:${srv.port}/?${deepKey}=${encodeURIComponent(name)}${shared}`);
@@ -3587,6 +3564,7 @@ const liveResourceXmlFiles = {
   itemxml: 'xml/item.xml',
   iteminfox7: 'xml/iteminfo.x7',
   weaponlua: 'xml/weapon_lua.x7',
+  weaponx7: 'xml/weapon.x7',
   iteminfoStringX7: 'language/xml/iteminfo_string_table.x7',
   iteminfoStringXML: 'language/xml/iteminfo_string_table.xml'
 };
@@ -3766,13 +3744,10 @@ ipcMain.handle('liveResourceAddMaps', async (event, data = {}) => {
 
     const archive = getResourceArchive(data.resourcePath);
 
-    
     let cmText = readArchiveText(archive, liveMapClientFiles.maplist);
     if(cmText == null) return { ok: false, error: `${liveMapClientFiles.maplist} not found in resource.s4hd.` };
     let ntName = null, ntText = null;
     for(const n of liveMapClientFiles.nameTable){ const t = readArchiveText(archive, n); if(t != null){ ntName = n; ntText = t; break; } }
-    
-
     
     const gameData = data.gameDataPath && fs.existsSync(data.gameDataPath) ? data.gameDataPath : null;
     const serverMapPath = gameData ? path.join(gameData, 'xml', 'map.x7') : null;
@@ -3782,7 +3757,6 @@ ipcMain.handle('liveResourceAddMaps', async (event, data = {}) => {
     let smText = hasServerMap ? fs.readFileSync(serverMapPath, 'utf8') : '';
     let snText = hasServerName ? fs.readFileSync(serverNamePath, 'utf8') : '';
 
-    
     const addMapEntries = (mapText, id, nameKey, m) => {
       let added = false;
       const present = mapsUtil.serverModesForBginfo(mapText, m.bginfoPath);
@@ -3801,12 +3775,9 @@ ipcMain.handle('liveResourceAddMaps', async (event, data = {}) => {
 
       const nameKey = mapsUtil.mapNameKey(m.file);
 
-      
       let id = mapsUtil.mapIdForBginfo(cmText, m.bginfoPath);
       if(id == null && hasServerMap) id = mapsUtil.mapIdForBginfo(smText, m.bginfoPath);
 
-      
-      
       let idIsBad = false;
       if(id != null){
         if(id > 255) idIsBad = true;
@@ -3838,14 +3809,12 @@ ipcMain.handle('liveResourceAddMaps', async (event, data = {}) => {
         if(id == null){ results.push({ id: 0, nombre: m.name, status: 'NotAdded', src: mapPreviewSrc(m.raiz, m.preview) }); continue; }
       }
 
-      
       let clientAdded;
       [cmText, clientAdded] = addMapEntries(cmText, id, nameKey, m);
       if(ntText != null && !ntText.includes(`key="${nameKey}"`)){
         ntText = mapsUtil.insertBeforeClose(ntText, mapNameTableCloseTag(ntText), mapsUtil.clientNameString(nameKey, m.name));
       }
 
-      
       let serverAdded = false;
       if(hasServerMap){ [smText, serverAdded] = addMapEntries(smText, id, nameKey, m); }
       if(hasServerName && !snText.includes(`key="${nameKey}"`)){
@@ -3885,7 +3854,6 @@ ipcMain.handle('liveResourceAddMaps', async (event, data = {}) => {
       }
     }
 
-    
     let copied = 0;
     for(const raiz of raicesMapas){
       for(const sub of ['bgm', 'effects', 'image', 'mapinfo', 'mapselect', 'model']){
@@ -3907,7 +3875,6 @@ ipcMain.handle('liveResourceAddMaps', async (event, data = {}) => {
     if(hasServerMap) fs.writeFileSync(serverMapPath, smText, 'utf8');
     if(hasServerName) fs.writeFileSync(serverNamePath, snText, 'utf8');
 
-    
     if(gameData){
       const dstMapinfo = path.join(gameData, 'resources', 'mapinfo');
       fs.mkdirSync(dstMapinfo, { recursive: true });
@@ -3979,8 +3946,18 @@ async function prepareLiveResourceXmlFiles(archive){
     present[key] = true;
   }
 
+  const format = paths.iteminfox7
+    ? (itemS1.detectFormat(await fsp.readFile(paths.iteminfox7, 'utf8')) === 's1' ? 's1' : 's10')
+    : 's10';
+
+  const optionalPairs = format === 's1' ? new Set(['itemx7']) : new Set();
+  const requiredSingletons = format === 's1'
+    ? [...liveResourceSingletons, 'weaponx7']
+    : liveResourceSingletons;
+
   for(const [a, b] of liveResourcePairs){
     if(!paths[a] && !paths[b]){
+      if(optionalPairs.has(a)) continue;
       throw new Error(`${liveResourceXmlFiles[a]} / ${liveResourceXmlFiles[b]} not found in resource.s4hd.`);
     }
     if(paths[a] && !paths[b]){
@@ -3996,13 +3973,13 @@ async function prepareLiveResourceXmlFiles(archive){
     }
   }
 
-  for(const key of liveResourceSingletons){
+  for(const key of requiredSingletons){
     if(!paths[key]){
       throw new Error(`${liveResourceXmlFiles[key]} not found in resource.s4hd.`);
     }
   }
 
-  return { tempRoot, paths, present };
+  return { tempRoot, paths, present, format };
 }
 
 async function writeLiveResourceXmlFiles(archive, prepared){
@@ -4194,6 +4171,39 @@ function collectLiveCostumeFiles(sourceRoot){
   return items;
 }
 
+async function appendCostumeItemS1(filePath, id, costume, anclaje){
+  const data = await fsp.readFile(filePath, 'utf8');
+  const itemXml = itemS1.makeCostumeItem(id, costume.icon, costume.displayName, costume.sex, costume.model, costume.folderType, {
+    hidingOption: String(costume.folderType).toLowerCase().includes('hat') ? 'hair_all' : '',
+    nodeParent: anclaje ? anclaje.nodeParent : undefined,
+    animationPart: anclaje ? anclaje.animationPart : undefined
+  });
+
+  await fsp.writeFile(filePath, itemS1.insertItem(data, id, itemXml), 'utf8');
+}
+
+async function appendWeaponItemS1(id, weaName, weaType, sceneFile, iconFile){
+  const baseId = itemS1.weaponBaseId(weaType);
+  if(!baseId){
+    throw new Error(`${weaType} no existe en Season 1, no hay arma base de la que copiar`);
+  }
+
+  const info = await fsp.readFile(activeFilePaths.iteminfox7, 'utf8');
+  const itemXml = itemS1.cloneWeaponItem(info, baseId, id, {
+    displayName: weaName,
+    icon: iconFile,
+    sceneFile
+  });
+  await fsp.writeFile(activeFilePaths.iteminfox7, itemS1.insertItem(info, id, itemXml), 'utf8');
+
+  const weaponPath = activeFilePaths.weaponx7;
+  if(weaponPath && fs.existsSync(weaponPath)){
+    const weapons = await fsp.readFile(weaponPath, 'utf8');
+    const entry = itemS1.cloneWeaponEntry(weapons, baseId, id, { icon: iconFile, sceneFile });
+    await fsp.writeFile(weaponPath, itemS1.insertWeaponEntry(weapons, entry), 'utf8');
+  }
+}
+
 async function appendXmlItem(filePath, itemXml){
   let data = '';
   try {
@@ -4252,7 +4262,35 @@ async function checkCostumeStringAvailability(id, name){
   return true;
 }
 
+async function findAvailableCostumeIdS1(start, end, name){
+  const data = await fsp.readFile(activeFilePaths.iteminfox7, 'utf8');
+  const { category, subCategory } = itemS1.splitId(start);
+  const used = new Set(itemS1.itemBlocks(data, category, subCategory).map(block => block.number));
+
+  if(new RegExp(`NAME="${escapeRegExp(name)}"`).test(data)){
+    return { duplicateName: true, id: start };
+  }
+
+  for(let id = start; id <= end; id++){
+    if(used.has(id % 10000)) continue;
+
+    const stringOk = await checkCostumeStringAvailability(id, name);
+    if(stringOk === 'duplicateName'){
+      return { duplicateName: true, id };
+    }
+    if(stringOk === true){
+      return { id };
+    }
+  }
+
+  return null;
+}
+
 async function findAvailableCostumeId(start, end, name){
+  if(await getClientFormat() === 's1'){
+    return findAvailableCostumeIdS1(start, end, name);
+  }
+
   for(let id = start; id <= end; id++){
     const resItemX7 = await verifyItemX7(id, name);
     const resItemXML = await verifyItem_xml(id, name);
@@ -4305,15 +4343,21 @@ async function addCostumeItemToFiles(costume, sourceRoot){
   });
   const stringEntries = { id, ...buildCostumeStringEntries(id, costume.displayName) };
 
-  await appendXmlItem(activeFilePaths.itemx7, itemXml);
-  await appendXmlItem(activeFilePaths.itemxml, itemXml);
-  await appendStringTable(activeFilePaths.iteminfox7, stringEntries);
+  if(await getClientFormat() === 's1'){
+    await appendCostumeItemS1(activeFilePaths.iteminfox7, id, costume, anclaje);
+  } else {
+    await appendXmlItem(activeFilePaths.itemx7, itemXml);
+    await appendXmlItem(activeFilePaths.itemxml, itemXml);
+    await appendStringTable(activeFilePaths.iteminfox7, stringEntries);
+  }
+
   await appendStringTable(activeFilePaths.iteminfoStringX7, stringEntries);
   await appendStringTable(activeFilePaths.iteminfoStringXML, stringEntries);
 
   if(useDB){
     const resAddDb = await addtodb(id, costume.displayName, dbConfig.host, dbConfig.user, dbConfig.pass, dbConfig.db, dbRunIds, costume.costumeType, {
       kind: 'costume',
+      clientFormat: await getClientFormat(),
       sex: costume.sex,
       recolorCount: costume.recolorCount || 0
     });
@@ -5511,8 +5555,17 @@ ipcMain.handle('shopEditSave', async (event, data = {}) => {
     let [iiRows] = await q('SELECT * FROM shop_iteminfos WHERE ShopItemId = ? ORDER BY Id LIMIT 1', [itemNumber]);
     let ii = iiRows[0];
     if(!ii){
-      const [ins] = await q('INSERT INTO shop_iteminfos (ShopItemId, PriceGroupId, EffectGroupId, DiscountPercentage, Type) VALUES (?, 0, 0, 0, 1)', [itemNumber]);
-      ii = { Id: ins.insertId, PriceGroupId: 0, EffectGroupId: 0 };
+      const [pgIns] = await q('INSERT INTO shop_price_groups (Name, PriceType) VALUES (?, ?)', [('i' + itemNumber).slice(0, 20), priceType]);
+      const [egRows] = await q('SELECT Id FROM shop_effect_groups ORDER BY Id LIMIT 1');
+      const egId = egRows[0] ? Number(egRows[0].Id) : 0;
+      const [cols] = await q('SHOW COLUMNS FROM shop_iteminfos');
+      const columnas = new Set(cols.map(c => String(c.Field).toLowerCase()));
+      const campos = ['ShopItemId', 'PriceGroupId', 'EffectGroupId', 'DiscountPercentage'];
+      const valores = [itemNumber, pgIns.insertId, egId, 0];
+      if(columnas.has('type')){ campos.push('Type'); valores.push(1); }
+      if(columnas.has('isenabled')){ campos.push('IsEnabled'); valores.push(1); }
+      const [ins] = await q(`INSERT INTO shop_iteminfos (${campos.join(", ")}) VALUES (${campos.map(() => "?").join(", ")})`, valores);
+      ii = { Id: ins.insertId, PriceGroupId: pgIns.insertId, EffectGroupId: egId };
     }
 
     if(body.mainTab != null && body.subTab != null){
@@ -5591,7 +5644,6 @@ ipcMain.handle('shopEditSave', async (event, data = {}) => {
 
 ipcMain.handle('save-db-config', async (event, data) => {
   await fsp.writeFile(configPath, JSON.stringify(data, null, 2));
-  
   
   dbConfig = {
     host: data.host,
@@ -5802,10 +5854,6 @@ app.on('window-all-closed', () => {
 			app.quit();
 		}
 })
-
-    
-
- 
 
 // ============================================================
 //  Desempaquetado de clientes (Themida) con unlicense

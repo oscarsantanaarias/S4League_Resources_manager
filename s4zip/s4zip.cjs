@@ -656,8 +656,6 @@ function parseContainer(containerPath) {
     archive.containerMode = "s4hd";
     return archive;
   } catch (normalErr) {
-    // el contenedor de Season 1 usa AES y otra tabla de llaves, no hay nada en el archivo
-    // que lo identifique, asi que se prueba al final
     try {
       return season1.parseContainer(containerPath);
     } catch {
@@ -1036,7 +1034,6 @@ function main() {
   const manifest = [];
   let extracted = 0;
   let failed = 0;
-
 
   console.log(`version: ${archive.version}`);
   console.log(`count: ${archive.count}`);

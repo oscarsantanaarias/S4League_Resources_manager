@@ -1,18 +1,5 @@
 "use strict";
 
-// Season 1 resource.s4hd pipeline.
-//
-// The S8/S10 container in s4zip.cjs is a later generation: block swap, keys embedded in the file
-// and SEED-CTR. Season 1 uses the original one, which is what Netsphere.Resource/S4Zip.cs
-// implements and what S4Client.exe does at 0x00403EC0:
-//
-//   container = AES-192-CFB( xorRotate(file) )
-//
-// Both layers derive their key from the file length through the same table, so there is nothing
-// stored in the file to identify it. The only difference against s4zip.cjs, besides AES instead
-// of SEED, is the key table itself: Season 1 keeps the old one below, 796 of its 800 bytes
-// differ from the S8/S10 table.
-
 const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
@@ -28,7 +15,6 @@ const KEY_SIZE = 40;
 const CAPPED32_KEY_SIZE = 32;
 const CAPPED32_LIMIT = 256;
 
-// 2 blocks x 10 keys x 40 bytes, dumped from S4Client.exe at 0x00F8CD40
 const KEY_TABLE_HEX =
   "8253434c2b0d37d7d9d81b6da0c32bee45881aa6181d9d382a55031dcda67307ed8dc5dba3bdb6d5" +
   "34b5b23d7d438cc02125cdb65376ce5dd487ca8481cb5e04ba693e65de218a63627190870a522844" +
@@ -65,7 +51,6 @@ const KEY_TABLE = (() => {
 
 const CAPPED32_KEY = KEY_TABLE[0][0];
 
-// static AES material, decrypted with the length derived key before use
 const AES_KEY = Buffer.from("0123456789abcdef0123456789abcdef0123456789abcdef", "hex");
 const AES_IV = Buffer.from("1234567890abcdef", "hex");
 
@@ -123,24 +108,18 @@ function capped32Encrypt(buffer) {
   return transform(buffer, CAPPED32_KEY.slice(0, CAPPED32_KEY_SIZE), CAPPED32_LIMIT, false);
 }
 
-// the client builds key and iv side by side in one buffer and hands the first 16 bytes to the
-// cipher as the iv, so the real iv is decrypted_iv (8) followed by decrypted_key[0..8]
 function aesMaterial(length) {
   const key = defaultDecrypt(AES_KEY, length);
   const iv = defaultDecrypt(AES_IV, length);
   return { key, iv: Buffer.concat([iv, key.slice(0, 8)]) };
 }
 
-// CFB-128 a mano sobre ECB. Electron trae BoringSSL, que no tiene aes-192-cfb (solo 128 y 256),
-// asi que usar el modo nativo funciona con node suelto y falla dentro de la app.
 function ecbCipher(key) {
   const cipher = crypto.createCipheriv("aes-192-ecb", key, null);
   cipher.setAutoPadding(false);
   return cipher;
 }
 
-// al descifrar, la entrada del keystream es iv seguido del propio texto cifrado, o sea que se
-// conoce entera de antemano y sale de una sola pasada
 function aesDecrypt(buffer) {
   if (buffer.length === 0) {
     return Buffer.alloc(0);
@@ -161,7 +140,6 @@ function aesDecrypt(buffer) {
   return out;
 }
 
-// al cifrar cada bloque depende del anterior ya cifrado, toca secuencial
 function aesEncrypt(buffer) {
   if (buffer.length === 0) {
     return Buffer.alloc(0);

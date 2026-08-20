@@ -29,6 +29,7 @@ let itemx7 = path.join(__dirname, '..', '..', 'resources/xml/item.x7');
 let itemxml = path.join(__dirname, '..', '..', 'resources/xml/item.xml')
 let weaponlua = path.join(__dirname, '..', '..', 'resources/xml/weapon_lua.x7');
 let weaponxml = path.join(__dirname, '..', '..', 'resources/auth/xbn/Weapons.xml');
+let weaponx7 = path.join(__dirname, '..', '..', 'resources/xml/weapon.x7');
 let iteminfox7 = path.join(__dirname, '..', '..', 'resources/xml/iteminfo.x7');
 let iteminfoStringX7 = path.join(__dirname, '..', '..', 'resources/language/xml/iteminfo_string_table.x7');
 let iteminfoStringXML = path.join(__dirname, '..', '..', 'resources/language/xml/iteminfo_string_table.xml');
@@ -38,6 +39,7 @@ function setVerifierPaths(paths = {}){
     itemxml = paths.itemxml || itemxml;
     weaponlua = paths.weaponlua || weaponlua;
     weaponxml = paths.weaponxml || weaponxml;
+    weaponx7 = paths.weaponx7 || weaponx7;
     iteminfox7 = paths.iteminfox7 || iteminfox7;
     iteminfoStringX7 = paths.iteminfoStringX7 || iteminfoStringX7;
     iteminfoStringXML = paths.iteminfoStringXML || iteminfoStringXML;
@@ -51,9 +53,6 @@ const heavies = ['HeavyMachineGun', 'LightMachineGun', 'Turrent', 'Gauss', 'Rock
 const special = ['MindShock', 'MindHeal'];
 const sentries = ['SentryGun', 'SentryStun'];
 
-
-
- 
  function verifyFields(campos){
     for(const [keys, values] of Object.entries(campos)){
         if(!values){
@@ -64,7 +63,6 @@ const sentries = ['SentryGun', 'SentryStun'];
 
     return true;
 }
-
 
 async function verifyItemX7(id, weaName){
 
@@ -99,7 +97,6 @@ async function verifyItemX7(id, weaName){
     });
 }
 
-
 async function verifyItem_xml(id, weaName){
     return new Promise((resolve, reject) => {
         if(!id){
@@ -131,7 +128,6 @@ async function verifyItem_xml(id, weaName){
     });
 }
 
-
 async function verifyWeaponLua(id){
     return new Promise((resolve, reject) => {
         if(!id){
@@ -155,14 +151,9 @@ async function verifyWeaponLua(id){
     });
 }
 
-
-
-
-
 async function verifyInfox7(IDName, IDTip, itemNames){
    const cleanName = cleanTodo(itemNames);
             
-   
     return new Promise((resolve, reject) => {
         if(!IDName){
             reject(new Error('IDName is not defined in verifyInfox7!'));
@@ -179,8 +170,6 @@ async function verifyInfox7(IDName, IDTip, itemNames){
             return;
         }
 
-
-
         fs.readFile(iteminfox7, 'utf8', (error, data) => {
             if(error){
                  reject(error);
@@ -191,12 +180,10 @@ async function verifyInfox7(IDName, IDTip, itemNames){
             const tipRegex = new RegExp(`<string key="TIP${IDTip}"`, 'g');
             const NameVerify = new RegExp(`eng="${cleanName}" spa="${cleanName}"`, 'g');
        
-
         const nameMatch = [...data.matchAll(nameRegex)];
             const tipMatch = [...data.matchAll(tipRegex)];
             const itemNameMatches = [...data.matchAll(NameVerify)];
          
-
          if(itemNameMatches.length > 0){
            
             return resolve("nombreEncontrado");
@@ -214,12 +201,9 @@ async function verifyInfox7(IDName, IDTip, itemNames){
     });
 }
 
-
-
 async function verifyString_tablex7(IDName, IDTip, itemNames){
    const cleanName = cleanTodo(itemNames);
             
-   
     return new Promise((resolve, reject) => {
         if(!IDName){
             reject(new Error('IDName is not defined in Verify ItemInfo String tablex7!'));
@@ -236,8 +220,6 @@ async function verifyString_tablex7(IDName, IDTip, itemNames){
             return;
         }
 
-
-
         fs.readFile(iteminfoStringX7, 'utf8', (error, data) => {
             if(error){
                  reject(error);
@@ -248,12 +230,10 @@ async function verifyString_tablex7(IDName, IDTip, itemNames){
             const tipRegex = new RegExp(`<string key="TIP${IDTip}"`, 'g');
             const NameVerify = new RegExp(`eng="${cleanName}" spa="${cleanName}"`, 'g');
        
-
         const nameMatch = [...data.matchAll(nameRegex)];
             const tipMatch = [...data.matchAll(tipRegex)];
             const itemNameMatches = [...data.matchAll(NameVerify)];
          
-
          if(itemNameMatches.length > 0){
            
             return resolve("nombreEncontrado");
@@ -271,12 +251,9 @@ async function verifyString_tablex7(IDName, IDTip, itemNames){
     });
 }
 
-
-
 async function verifyString_tableXML(IDName, IDTip, itemNames){
    const cleanName = cleanTodo(itemNames);
             
-   
     return new Promise((resolve, reject) => {
         if(!IDName){
             reject(new Error('IDName is not defined in Verify ItemInfo String tableXML!'));
@@ -293,8 +270,6 @@ async function verifyString_tableXML(IDName, IDTip, itemNames){
             return;
         }
 
-
-
         fs.readFile(iteminfoStringXML, 'utf8', (error, data) => {
             if(error){
                  reject(error);
@@ -305,12 +280,10 @@ async function verifyString_tableXML(IDName, IDTip, itemNames){
             const tipRegex = new RegExp(`<string key="TIP${IDTip}"`, 'g');
             const NameVerify = new RegExp(`eng="${cleanName}" spa="${cleanName}"`, 'g');
        
-
         const nameMatch = [...data.matchAll(nameRegex)];
             const tipMatch = [...data.matchAll(tipRegex)];
             const itemNameMatches = [...data.matchAll(NameVerify)];
          
-
          if(itemNameMatches.length > 0){
            
             return resolve("nombreEncontrado");
@@ -328,10 +301,6 @@ async function verifyString_tableXML(IDName, IDTip, itemNames){
     });
 }
 
-
-
-
-
 async function verifyWeaponsXML(id, name) {
     return new Promise((resolve, reject) => {
         if(!id){
@@ -343,8 +312,6 @@ async function verifyWeaponsXML(id, name) {
             console.error('Name is not defined!');
             resolve(false);
         }
-
-  
 
         fs.readFile(weaponxml, 'utf8', (error, data) => {
             if(error){
@@ -360,7 +327,6 @@ async function verifyWeaponsXML(id, name) {
                 const matchesName = [...data.matchAll(findName)].map(m => m);
                 const matchesID = [...data.matchAll(findID)].map(m => m);
                 
-
                 if(matchesName.length > 0){
                    
                     return resolve([false, 2]);
@@ -373,24 +339,12 @@ async function verifyWeaponsXML(id, name) {
 
                 return resolve(id);
                 
-
             }
-
 
         })
         
-
-
     });
-
 
 }
 
-
-
-
-
-
-
-
-module.exports = {setVerifierPaths, verifyFields, verifyInfox7, verifyItemX7, verifyWeaponLua, verifyItem_xml , verifyString_tablex7, verifyString_tableXML, verifyWeaponsXML , iteminfoStringX7, iteminfoStringXML, iteminfox7 , itemxml,  itemx7, weaponlua, weaponxml, melee, id_range, special, sentries, guns, snipers, heavies, thrown};
+module.exports = {setVerifierPaths, verifyFields, verifyInfox7, verifyItemX7, verifyWeaponLua, verifyItem_xml , verifyString_tablex7, verifyString_tableXML, verifyWeaponsXML , iteminfoStringX7, iteminfoStringXML, iteminfox7 , itemxml,  itemx7, weaponlua, weaponxml, weaponx7, melee, id_range, special, sentries, guns, snipers, heavies, thrown};
