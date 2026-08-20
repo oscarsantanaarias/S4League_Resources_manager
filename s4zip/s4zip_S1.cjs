@@ -253,6 +253,10 @@ function readEntry(entryBuffer) {
 }
 
 function writeEntry(entry) {
+  if (entry.checksum == null || entry.length == null) {
+    throw new Error(`entry incompleto en el indice: ${entry.fullName} (checksum=${entry.checksum}, length=${entry.length})`);
+  }
+
   const data = Buffer.alloc(ENTRY_SIZE_EXPECTED);
   const text = Buffer.from(entry.fullName, "ascii");
   text.copy(data, 0, 0, Math.min(text.length, 255));
@@ -263,6 +267,10 @@ function writeEntry(entry) {
 }
 
 function checksumCandidates(checksum) {
+  if (checksum == null) {
+    throw new Error("checksum ausente al buscar el archivo del recurso");
+  }
+
   const hex = BigInt.asUintN(64, checksum).toString(16);
   const padded = hex.padStart(16, "0");
   return padded === hex ? [hex] : [hex, padded];

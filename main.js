@@ -3907,7 +3907,7 @@ ipcMain.handle('liveResourceAddMaps', async (event, data = {}) => {
       note
     };
   } catch(e){
-    return { ok: false, error: e.message };
+    return { ok: false, error: describeError(e, 'add maps') };
   } finally {
     suppressResourceReload = false;
   }
@@ -4080,6 +4080,14 @@ function claveAnclajeCostume(item){
   return `${item.folderType}/${item.genderFolder}/${item.model}`.toLowerCase();
 }
 
+function isCostumePartModel(file){
+  return /_part\d+\.scn$/i.test(String(file || ''));
+}
+
+function costumeModelGroup(file){
+  return String(file || '').replace(/\.scn$/i, '').replace(/_part\d+$/i, '').toLowerCase();
+}
+
 function collectLiveCostumeFiles(sourceRoot){
   const costumeRoot = resolveCostumeRoot(sourceRoot);
   const items = [];
@@ -4113,9 +4121,18 @@ function collectLiveCostumeFiles(sourceRoot){
       const imgs = fs.readdirSync(imgPath).filter(file => /\.(dds|tga|png|jpg|bmp)$/i.test(file));
       const models = fs.readdirSync(modelPath).filter(file => /\.scn$/i.test(file));
       const allModelAssets = fs.readdirSync(modelPath).filter(file => /\.(dds|tga|png|jpg|bmp)$/i.test(file));
+      const hasOwnIcon = file => {
+        const fileBase = path.basename(file, path.extname(file)).toLowerCase();
+        return imgs.some(img => assetNamesMatch(fileBase, path.basename(img, path.extname(img)).toLowerCase()));
+      };
+      const mainModels = models.filter(file => !isCostumePartModel(file) || hasOwnIcon(file));
 
-      for(const model of models){
+      for(const model of mainModels){
         const base = path.basename(model, path.extname(model)).toLowerCase();
+        const group = costumeModelGroup(model);
+        const parts = models
+          .filter(file => file !== model && isCostumePartModel(file) && costumeModelGroup(file) === group)
+          .sort();
         const recolors = new Set();
         const iconAssets = imgs.filter(img => {
           if(!assetNamesMatchBase(base, img)){
@@ -4128,7 +4145,16 @@ function collectLiveCostumeFiles(sourceRoot){
           return true;
         });
         const modelAssets = allModelAssets.filter(asset => {
-          const info = costumeModelAssetInfo(model, asset);
+          let info = costumeModelAssetInfo(model, asset);
+          if(!info.match){
+            for(const part of parts){
+              const partInfo = costumeModelAssetInfo(part, asset);
+              if(partInfo.match){
+                info = partInfo;
+                break;
+              }
+            }
+          }
           if(info.match && info.recolorIndex > 0){
             recolors.add(info.recolorIndex);
           }
@@ -4160,6 +4186,7 @@ function collectLiveCostumeFiles(sourceRoot){
           icon,
           iconAssets,
           model,
+          parts,
           modelAssets,
           recolorCount: recolors.size,
           displayName
@@ -4175,6 +4202,7 @@ async function appendCostumeItemS1(filePath, id, costume, anclaje){
   const data = await fsp.readFile(filePath, 'utf8');
   const itemXml = itemS1.makeCostumeItem(id, costume.icon, costume.displayName, costume.sex, costume.model, costume.folderType, {
     hidingOption: String(costume.folderType).toLowerCase().includes('hat') ? 'hair_all' : '',
+    parts: costume.parts || [],
     nodeParent: anclaje ? anclaje.nodeParent : undefined,
     animationPart: anclaje ? anclaje.animationPart : undefined
   });
@@ -4338,6 +4366,7 @@ async function addCostumeItemToFiles(costume, sourceRoot){
   const anclaje = anclajesPet[claveAnclajeCostume(costume)] || null;
   const itemXml = makeCostumeItemx7(id, costume.icon, costume.displayName, costume.sex, costume.model, costume.folderType, {
     hidingOption: String(costume.folderType).toLowerCase().includes('hat') ? 'hair_all' : '',
+    parts: costume.parts || [],
     nodeParent: anclaje ? anclaje.nodeParent : undefined,
     animationPart: anclaje ? anclaje.animationPart : undefined
   });
@@ -4412,7 +4441,7 @@ async function addLiveCostumeAssetsToArchive(archive, sourceRoot, costumes){
       copied.push(resourceName);
     }
 
-    for(const asset of costume.modelAssets || []){
+    for(const asset of [...(costume.parts || []), ...(costume.modelAssets || [])]){
       const assetSrc = path.join(costumeRoot, costume.folderType, costume.genderFolder, 'model', asset);
       if(!fs.existsSync(assetSrc)) continue;
 
@@ -4486,7 +4515,7 @@ ipcMain.handle('liveResourceAddItems', async (event, data = {}) => {
       count: archive.entries.length
     };
   } catch(e){
-    return { ok: false, error: e.message };
+    return { ok: false, error: describeError(e, 'add weapons') };
   } finally {
     suppressResourceReload = false;
     skipWeaponsXml = false;
@@ -4496,6 +4525,18 @@ ipcMain.handle('liveResourceAddItems', async (event, data = {}) => {
     }
   }
 });
+
+function describeError(e, contexto){
+  const stack = String(e && e.stack ? e.stack : e);
+  console.error(`[${contexto}] ${stack}`);
+
+  const lineas = stack.split(/\r?\n/);
+  const origen = lineas.find(linea => /\bat .*\.(js|cjs):\d+/.test(linea) && !linea.includes("node:internal"));
+  const donde = origen ? origen.trim().replace(/^at\s+/, "").replace(/^.*[\\/]/, "").replace(/\)$/, "") : "";
+  const mensaje = e && e.message ? e.message : String(e);
+
+  return donde ? `${mensaje} (${contexto} - ${donde})` : `${mensaje} (${contexto})`;
+}
 
 ipcMain.handle('liveResourceAddCostumes', async (event, data = {}) => {
   let tempRoot = null;
@@ -4570,7 +4611,7 @@ ipcMain.handle('liveResourceAddCostumes', async (event, data = {}) => {
       count: archive.entries.length
     };
   } catch(e){
-    return { ok: false, error: e.message };
+    return { ok: false, error: describeError(e, 'add costumes') };
   } finally {
     suppressResourceReload = false;
     resetActiveFilePaths();

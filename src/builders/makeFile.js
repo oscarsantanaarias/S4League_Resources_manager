@@ -8,9 +8,27 @@ function makeCostumeItemx7(newID, icon, displayName, sex, sceneFile, costumeType
     const animationPart = options.animationPart ?? '0';
     const hidingOption = options.hidingOption ? ` hiding_option="${options.hidingOption}"` : '';
     const nodeTypes = new Set(['hair', 'face', 'acc', 'accessories', 'hats', 'pets']);
-    const graphic = nodeTypes.has(cleanType)
-        ? `<graphic icon_image="${icon}" to_node_scene_file1="${sceneFile}" to_node_parent_node1="${nodeParent}" to_node_animation_part1="${animationPart}"${hidingOption}/>`
-        : `<graphic icon_image="${icon}" to_part_scene_file="${sceneFile}"/>`;
+    const partParent = options.partParent || (nodeTypes.has(cleanType) ? nodeParent : 'Bip01 Pelvis');
+    const partAnimationPart = options.partAnimationPart ?? (nodeTypes.has(cleanType) ? animationPart : '1');
+
+    const nodos = [];
+    let toPart = '';
+
+    if(nodeTypes.has(cleanType)){
+        nodos.push({ file: sceneFile, parent: nodeParent, animationPart });
+    } else {
+        toPart = ` to_part_scene_file="${sceneFile}"`;
+    }
+
+    for(const part of options.parts || []){
+        nodos.push({ file: part, parent: partParent, animationPart: partAnimationPart });
+    }
+
+    const atributosNodo = nodos
+        .map((nodo, i) => ` to_node_scene_file${i + 1}="${nodo.file}" to_node_parent_node${i + 1}="${nodo.parent}" to_node_animation_part${i + 1}="${nodo.animationPart}"`)
+        .join('');
+
+    const graphic = `<graphic icon_image="${icon}"${atributosNodo}${toPart}${hidingOption}/>`;
 
     return `
         <item item_key="${newID}">

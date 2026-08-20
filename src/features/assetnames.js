@@ -24,12 +24,12 @@ function assetNamesMatch(modelName, iconName){
 
 function splitRecolorBase(value){
   const base = cleanAssetBaseName(value).replace(/^icon_/i, '');
-  const textureRecolor = base.match(/^(.*)_(?:a|e)tex_(\d+)$/i);
+  const textureRecolor = base.match(/^(.*)_(?:a|e|d)tex_(\d+)$/i);
   if(textureRecolor){
     return { base: textureRecolor[1], index: Number.parseInt(textureRecolor[2], 10) || 0 };
   }
 
-  const textureBase = base.match(/^(.*)_(?:a|e)tex$/i);
+  const textureBase = base.match(/^(.*)_(?:a|e|d)tex$/i);
   if(textureBase){
     return { base: textureBase[1], index: 0 };
   }
@@ -60,11 +60,11 @@ function costumeModelAssetInfo(modelName, assetName){
   const assetBase = cleanAssetBaseName(assetName);
   const escaped = escapeRegExp(modelBase);
 
-  if(assetBase === modelBase || new RegExp(`^${escaped}_(?:a|e)tex$`, 'i').test(assetBase)){
+  if(assetBase === modelBase || new RegExp(`^${escaped}_(?:a|e|d)tex$`, 'i').test(assetBase)){
     return { match: true, recolorIndex: 0 };
   }
 
-  const recolor = assetBase.match(new RegExp(`^${escaped}_(?:a|e)tex_(\\d+)$`, 'i'));
+  const recolor = assetBase.match(new RegExp(`^${escaped}_(?:a|e|d)tex_(\\d+)$`, 'i'));
   if(recolor){
     return { match: true, recolorIndex: Number.parseInt(recolor[1], 10) || 0 };
   }

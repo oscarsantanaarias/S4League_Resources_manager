@@ -513,6 +513,10 @@ function readEntry(entryBuffer) {
 }
 
 function checksumCandidates(checksum) {
+  if (checksum == null) {
+    throw new Error("checksum ausente al buscar el archivo del recurso");
+  }
+
   const hex = BigInt.asUintN(64, checksum).toString(16);
   const padded = hex.padStart(16, "0");
   return padded === hex ? [hex] : [hex, padded];
@@ -845,6 +849,10 @@ function writeCString(buffer, value, offset, size) {
 }
 
 function writeEntry(entry) {
+  if (entry.checksum == null || entry.length == null) {
+    throw new Error(`entry incompleto en el indice: ${entry.fullName} (checksum=${entry.checksum}, length=${entry.length})`);
+  }
+
   const data = Buffer.alloc(ENTRY_SIZE_EXPECTED);
   writeCString(data, entry.fullName, 0, 256);
   data.writeBigInt64LE(BigInt.asIntN(64, entry.checksum), 256);

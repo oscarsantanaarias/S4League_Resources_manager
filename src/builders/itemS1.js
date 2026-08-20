@@ -157,9 +157,20 @@ function makeCostumeItem(id, icon, displayName, sex, sceneFile, costumeType, opt
     const nodeParent = options.nodeParent || (clean === 'pets' || clean === 'pet' ? 'Bip01' : 'Bip01 Head');
     const animationPart = options.animationPart ?? '0';
 
-    const attach = NODE_TYPES.has(clean)
-        ? `<to_node scene_file="${escapeAttr(sceneFile)}" parent_node="${escapeAttr(nodeParent)}" animation_part="${escapeAttr(animationPart)}" />`
-        : `<to_part scene_file="${escapeAttr(sceneFile)}" />`;
+    const partParent = options.partParent || (NODE_TYPES.has(clean) ? nodeParent : 'Bip01 Pelvis');
+    const partAnimationPart = options.partAnimationPart ?? (NODE_TYPES.has(clean) ? animationPart : '1');
+
+    const lineas = [
+        NODE_TYPES.has(clean)
+            ? `<to_node scene_file="${escapeAttr(sceneFile)}" parent_node="${escapeAttr(nodeParent)}" animation_part="${escapeAttr(animationPart)}" />`
+            : `<to_part scene_file="${escapeAttr(sceneFile)}" />`
+    ];
+
+    for(const part of options.parts || []){
+        lineas.push(`<to_node scene_file="${escapeAttr(part)}" parent_node="${escapeAttr(partParent)}" animation_part="${escapeAttr(partAnimationPart)}" />`);
+    }
+
+    const attach = lineas.join('\n\t\t\t\t\t');
 
     const hiding = options.hidingOption
         ? `\n\t\t\t\t\t<hiding option="${escapeAttr(options.hidingOption)}" />`
