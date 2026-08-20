@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>rtool UI Inspector</title>
+  <style>
+    :root {
+      --bg: #0f141b;
+      --panel: #1a212b;
+      --panel-2: #202833;
+      --line: #2d3948;
+      --text: #eef4ff;
+      --muted: #9fb2c9;
+      --blue: #3d8cff;
+      --blue-2: #5ea1ff;
+      --green: #2fbf71;
+      --red: #d9534f;
+      --yellow: #f0b94b;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: Segoe UI, Roboto, Arial, sans-serif;
+      min-height: 100vh;
+    }
+
+    .page {
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
+      padding: 24px;
+      gap: 18px;
+    }
+
+    .toolbar {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 18px 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.18);
+    }
+
+    .toolbarTop {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+
+    .title {
+      font-size: 32px;
+      font-weight: 700;
+      letter-spacing: 0.2px;
+    }
+
+    .controls {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    button,
+    input {
+      border-radius: 10px;
+      border: 1px solid var(--line);
+      font-size: 14px;
+      outline: none;
+    }
+
+    button {
+      background: linear-gradient(180deg, #273241, #1f2833);
+      color: var(--text);
+      padding: 10px 14px;
+      cursor: pointer;
+      transition: 0.15s ease;
+      min-width: 84px;
+      font-weight: 600;
+    }
+
+    button:hover {
+      transform: translateY(-1px);
+      border-color: var(--blue);
+    }
+
+    button.primary {
+      background: linear-gradient(180deg, var(--blue-2), var(--blue));
+      border-color: #6cabff;
+      color: white;
+    }
+
+    button.ghost {
+      min-width: 70px;
+    }
+
+    .search {
+      min-width: 260px;
+      padding: 10px 12px;
+      background: var(--panel-2);
+      color: var(--text);
+    }
+
+    .meta {
+      color: var(--muted);
+      font-size: 13px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 16px;
+    }
+
+    .tablePanel {
+      flex: 1;
+      min-height: 0;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.18);
+    }
+
+    .tableWrap {
+      flex: 1;
+      min-height: 0;
+      overflow: auto;
+      border-radius: 10px;
+      border: 1px solid var(--line);
+      background: #111821;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 980px;
+    }
+
+    thead th {
+      position: sticky;
+      top: 0;
+      z-index: 2;
+      background: #18202a;
+      color: white;
+      text-align: left;
+      font-size: 13px;
+      padding: 14px 12px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    tbody td {
+      padding: 12px;
+      border-bottom: 1px solid rgba(255,255,255,0.05);
+      font-size: 13px;
+      color: #dfe8f5;
+      vertical-align: middle;
+    }
+
+    tbody tr:hover {
+      background: rgba(61, 140, 255, 0.08);
+    }
+
+    .mono {
+      font-family: Consolas, monospace;
+      font-size: 12px;
+    }
+
+    .nameCell {
+      font-weight: 600;
+      color: white;
+    }
+
+    .muted {
+      color: var(--muted);
+    }
+
+    .toggleBadge {
+      min-width: 74px;
+      padding: 8px 10px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 700;
+      border: none;
+    }
+
+    .toggleBadge.visible {
+      background: rgba(47, 191, 113, 0.18);
+      color: #7cf0ac;
+      box-shadow: inset 0 0 0 1px rgba(47, 191, 113, 0.4);
+    }
+
+    .toggleBadge.hidden {
+      background: rgba(217, 83, 79, 0.18);
+      color: #ff9d99;
+      box-shadow: inset 0 0 0 1px rgba(217, 83, 79, 0.4);
+    }
+
+    .toggleBadge.unknown {
+      background: rgba(240, 185, 75, 0.18);
+      color: #ffd483;
+      box-shadow: inset 0 0 0 1px rgba(240, 185, 75, 0.4);
+    }
+
+    .childBtn {
+      min-width: 92px;
+      padding: 8px 10px;
+      font-size: 12px;
+    }
+
+    .empty {
+      padding: 28px;
+      color: var(--muted);
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <div class="toolbar">
+      <div class="toolbarTop">
+        <div class="title">UI Inspector</div>
+        <div class="controls">
+          <button class="backBtn ghost">Back</button>
+          <button class="refreshBtn primary">Refresh</button>
+          <button class="allBtn">All</button>
+          <button class="currentBtn">Current</button>
+          <input class="search" type="text" placeholder="filter name/class/address" />
+        </div>
+      </div>
+      <div class="meta">
+        <span class="metaMode">Mode: ALL</span>
+        <span class="metaScope">Scope: ROOT</span>
+        <span class="metaCount">Nodes: 0</span>
+        <span class="metaVersion">Snapshot: 0</span>
+        <span class="metaStatus">Idle</span>
+      </div>
+    </div>
+
+    <div class="tablePanel">
+      <div class="tableWrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Item Name</th>
+              <th>Class</th>
+              <th>Address</th>
+              <th>Parent</th>
+              <th>Visible</th>
+              <th>Children</th>
+            </tr>
+          </thead>
+          <tbody class="bodyRows">
+            <tr><td colspan="6" class="empty">No data yet.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const backBtn = document.querySelector('.backBtn');
+    const refreshBtn = document.querySelector('.refreshBtn');
+    const allBtn = document.querySelector('.allBtn');
+    const currentBtn = document.querySelector('.currentBtn');
+    const searchInput = document.querySelector('.search');
+    const bodyRows = document.querySelector('.bodyRows');
+    const metaMode = document.querySelector('.metaMode');
+    const metaScope = document.querySelector('.metaScope');
+    const metaCount = document.querySelector('.metaCount');
+    const metaVersion = document.querySelector('.metaVersion');
+    const metaStatus = document.querySelector('.metaStatus');
+
+    let snapshot = { version: 0, nodes: [] };
+    let mode = 'all';
+    let scopeRoot = 'ROOT';
+
+    function childMap(nodes) {
+      const map = new Map();
+      for (const node of nodes) {
+        const key = node.parent || 'ROOT';
+        if (!map.has(key)) map.set(key, []);
+        map.get(key).push(node);
+      }
+      return map;
+    }
+
+    function currentRoot(nodes) {
+      if (!nodes.length) return 'ROOT';
+      const latest = Math.max(...nodes.map(node => Number(node.lastSeenTick || 0)));
+      const threshold = latest - 1800;
+      const recent = nodes.filter(node => Number(node.lastSeenTick || 0) >= threshold);
+      const counts = new Map();
+
+      for (const node of recent) {
+        const key = node.parent || 'ROOT';
+        counts.set(key, (counts.get(key) || 0) + 1);
+      }
+
+      let best = 'ROOT';
+      let bestCount = 0;
+      for (const [key, count] of counts.entries()) {
+        if (count > bestCount) {
+          best = key;
+          bestCount = count;
+        }
+      }
+      return best;
+    }
+
+    function parentOf(root) {
+      if (root === 'ROOT') return 'ROOT';
+      const found = snapshot.nodes.find(node => node.address === root);
+      return found?.parent || 'ROOT';
+    }
+
+    function subtree(root, cmap) {
+      if (root === 'ROOT') {
+        return cmap.get('ROOT') || [];
+      }
+
+      const out = [];
+      const queue = [...(cmap.get(root) || [])];
+      while (queue.length) {
+        const node = queue.shift();
+        out.push(node);
+        queue.push(...(cmap.get(node.address) || []));
+      }
+      return out;
+    }
+
+    function badge(node) {
+      if (!node.visibleKnown) {
+        return '<button class="toggleBadge unknown">?</button>';
+      }
+      return node.visible
+        ? '<button class="toggleBadge visible">VISIBLE</button>'
+        : '<button class="toggleBadge hidden">HIDDEN</button>';
+    }
+
+    function render() {
+      const nodes = snapshot.nodes || [];
+      const cmap = childMap(nodes);
+      const activeRoot = mode === 'current' ? currentRoot(nodes) : scopeRoot;
+      const filter = searchInput.value.trim().toLowerCase();
+      let rows = mode === 'current'
+        ? subtree(activeRoot, cmap)
+        : (cmap.get(activeRoot) || []);
+
+      if (filter) {
+        rows = rows.filter(node =>
+          String(node.name || '').toLowerCase().includes(filter)
+          || String(node.className || '').toLowerCase().includes(filter)
+          || String(node.address || '').toLowerCase().includes(filter)
+        );
+      }
+
+      rows.sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')));
+
+      metaMode.textContent = `Mode: ${mode.toUpperCase()}`;
+      metaScope.textContent = `Scope: ${activeRoot}`;
+      metaCount.textContent = `Nodes: ${rows.length}`;
+      metaVersion.textContent = `Snapshot: ${snapshot.version || 0}`;
+
+      if (!rows.length) {
+        bodyRows.innerHTML = '<tr><td colspan="6" class="empty">No nodes in current scope.</td></tr>';
+        return;
+      }
+
+      bodyRows.innerHTML = rows.map(node => {
+        const count = (cmap.get(node.address) || []).length;
+        return `
+          <tr data-address="${node.address}" data-parent="${node.parent || 'ROOT'}">
+            <td class="nameCell">${node.name || '(no name)'}</td>
+            <td>${node.className || '&lt;?&gt;'}</td>
+            <td class="mono">${node.address}</td>
+            <td class="mono muted">${node.parent || 'ROOT'}</td>
+            <td>${badge(node)}</td>
+            <td>${count > 0 ? `<button class="childBtn">Children (${count})</button>` : '0'}</td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    async function reload() {
+      metaStatus.textContent = 'Loading...';
+      const result = await window.puente.uiInspectorLoad();
+      if (!result.ok) {
+        snapshot = { version: 0, nodes: [] };
+        bodyRows.innerHTML = `<tr><td colspan="6" class="empty">Load failed: ${result.error}</td></tr>`;
+        metaStatus.textContent = `Error: ${result.error}`;
+        return;
+      }
+
+      snapshot = {
+        version: result.version || 0,
+        nodes: result.nodes || []
+      };
+      metaStatus.textContent = 'Ready';
+      render();
+    }
+
+    refreshBtn.addEventListener('click', reload);
+    allBtn.addEventListener('click', () => {
+      mode = 'all';
+      scopeRoot = 'ROOT';
+      render();
+    });
+    currentBtn.addEventListener('click', () => {
+      mode = 'current';
+      render();
+    });
+    searchInput.addEventListener('input', render);
+
+    backBtn.addEventListener('click', () => {
+      if (mode === 'all' && scopeRoot !== 'ROOT') {
+        scopeRoot = parentOf(scopeRoot);
+        render();
+        return;
+      }
+      window.close();
+    });
+
+    bodyRows.addEventListener('click', async (event) => {
+      const row = event.target.closest('tr');
+      if (!row) return;
+
+      if (event.target.classList.contains('toggleBadge')) {
+        metaStatus.textContent = `Toggle ${row.dataset.address}...`;
+        const result = await window.puente.uiInspectorCommand({
+          action: 'toggle',
+          address: row.dataset.address
+        });
+        metaStatus.textContent = result.ok ? 'Toggled' : `Toggle fail: ${result.error}`;
+        setTimeout(reload, 120);
+        return;
+      }
+
+      if (event.target.classList.contains('childBtn')) {
+        mode = 'all';
+        scopeRoot = row.dataset.address;
+        render();
+      }
+    });
+
+    bodyRows.addEventListener('dblclick', (event) => {
+      const row = event.target.closest('tr');
+      if (!row) return;
+      mode = 'all';
+      scopeRoot = row.dataset.address;
+      render();
+    });
+
+    reload();
+  </script>
+</body>
+</html>

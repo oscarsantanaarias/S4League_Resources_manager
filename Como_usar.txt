@@ -1,0 +1,68 @@
+========================================================================
+ Resources & Mods manager  -  Como usar
+========================================================================
+
+PRIMERA VEZ
+  Solo corre run.bat. La primera vez instala las dependencias y recompila los
+  modulos nativos, y despues abre la app. Las siguientes veces solo la abre.
+  (Necesitas Node.js instalado: https://nodejs.org)
+
+------------------------------------------------------------------------
+ PRIMERO CONFIGURA LAS RUTAS  (barra de arriba -> Paths)
+------------------------------------------------------------------------
+  - Select Resource Folder : la carpeta del cliente que tiene
+                             resource.s4hd (y la carpeta _resources).
+  - Source Folder          : la carpeta con tu contenido custom
+                             (archivos de arma/costume, texturas, etc).
+  - Select GameData Folder : la carpeta "data" de tu emulador/servidor,
+                             de donde el juego lee sus tablas xml/x7.
+
+  Despues dale a "Load Resources" para abrir el arbol del cliente.
+
+  Weapons y Costumes tambien registran el item en la base de datos del
+  servidor, asi que llena los campos de DB (host/user/pass/database + las
+  tablas del item) y activa el toggle de la base de datos antes de
+  agregarlos. Los mapas no lo necesitan.
+
+------------------------------------------------------------------------
+ FLUJO NORMAL
+------------------------------------------------------------------------
+  Extract  ->  Add (arma/costume/mapa)  ->  Pack
+
+  - Extract : desempaca resource.s4hd / _resources en extracted_resources
+              para poder editar los archivos.
+  - Add     : inyecta tu contenido nuevo (ver abajo).
+  - Pack    : arma todo lo de extracted_resources de vuelta en
+              resource.s4hd + _resources para que el cliente lo lea.
+
+------------------------------------------------------------------------
+ ADD WEAPONS   (Add Tools -> Add Weapons)
+------------------------------------------------------------------------
+  1. Pon los archivos del arma en tu Source Folder.
+  2. Ten las rutas Resource + GameData puestas y la DB encendida.
+  3. Dale a Add Weapons.
+  Copia los recursos del arma al cliente y escribe el item info / xml del
+  arma en GameData y en la base de datos.
+  4. Dale a Pack cuando termines.
+
+------------------------------------------------------------------------
+ ADD COSTUMES   (Add Tools -> Add Costumes)
+------------------------------------------------------------------------
+  1. Pon los archivos del costume en tu Source Folder.
+  2. Rutas Resource + GameData puestas, DB encendida.
+  3. Dale a Add Costumes. Agrega los recursos del costume y registra el
+     item para que salga en el juego.
+  4. Dale a Pack.
+
+------------------------------------------------------------------------
+ ADD MAPS   (Add Tools -> Add Maps)
+------------------------------------------------------------------------
+  1. Mete los archivos de info del mapa (.ini) en:
+     resources/maps/mapinfo/   y la imagen de preview al lado.
+  2. Configura la ruta del Resource Folder.
+  3. Dale a Add Maps. Lee los .ini, registra cada mapa en la lista de
+     mapas del cliente + la tabla de nombres, y habilita sus modos.
+  4. Dale a Pack.
+
+  Nota: el id de un mapa es un solo byte, asi que van entre 2 y 255.
+========================================================================

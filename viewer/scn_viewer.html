@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>SCN 3D Preview</title>
+<style>
+  html,body{margin:0;height:100%;background:#15181d;overflow:hidden;font-family:Segoe UI,Arial,sans-serif;color:#cdd3da;}
+  #info{position:fixed;left:10px;top:10px;color:#cdd3da;font-size:12px;background:rgba(0,0,0,.5);
+        padding:6px 10px;border-radius:6px;z-index:5;line-height:1.6;}
+  #info select,#info button{background:#1b2027;color:#cdd3da;border:1px solid #333;border-radius:4px;padding:3px 7px;font-size:12px;cursor:pointer;margin-top:4px;}
+  #err{position:fixed;left:10px;bottom:10px;right:10px;color:#ff9a9a;font-size:13px;z-index:6;white-space:pre-wrap;font-family:Consolas,monospace;}
+  canvas{display:block;}
+</style>
+</head>
+<body>
+<div id="info">loading…</div>
+<div id="err"></div>
+<script>
+const info = document.getElementById('info');
+const err = document.getElementById('err');
+function fail(e){ err.textContent = String(e && e.stack ? e.stack : e); info.textContent = 'error'; }
+
+try {
+  const fs = require('fs');
+  const path = require('path');
+  const THREE = require('three');
+
+  const argv = process.argv || [];
+  const charArg = argv.find(a => a.startsWith('--char='));
+  const scnArg = argv.find(a => a.startsWith('--scn='));
+
+  const renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setPixelRatio(window.devicePixelRatio || 1);
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  document.body.appendChild(renderer.domElement);
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x15181d);
+  const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.5, 1e6);
+  scene.add(new THREE.AmbientLight(0xffffff, 1.05));
+  const key = new THREE.DirectionalLight(0xffffff, 1.0); key.position.set(1, 2, 1.5); scene.add(key);
+  const fill = new THREE.DirectionalLight(0xffffff, 0.45); fill.position.set(-1, 0.5, -1); scene.add(fill);
+  const root = new THREE.Group();
+  scene.add(root);
+
+  const texLoader = new THREE.TextureLoader();
+  const texCache = new Map();
+  function getTex(url){
+    if(!url) return null;
+    if(texCache.has(url)) return texCache.get(url);
+    const t = texLoader.load(url);
+    if('colorSpace' in t && THREE.SRGBColorSpace) t.colorSpace = THREE.SRGBColorSpace;
+    t.wrapS = t.wrapT = THREE.RepeatWrapping;
+    t.flipY = false;
+    if(renderer.capabilities) t.anisotropy = renderer.capabilities.getMaxAnisotropy();
+    texCache.set(url, t);
+    return t;
+  }
+  function makeMat(tex, rf, name){
+    rf = rf || 0; name = (name || '').toLowerCase();
+    const cutout = (rf & 4) !== 0;
+    const additive = name.includes('alphablend2');
+    const transp = (rf & 2) !== 0 || additive;
+    return new THREE.MeshBasicMaterial({
+      map: tex || null, color: tex ? 0xffffff : 0xb0b8c0,
+      side: THREE.DoubleSide,
+      transparent: transp,
+      blending: additive ? THREE.AdditiveBlending : THREE.NormalBlending,
+      alphaTest: cutout ? 0.5 : (transp ? 0.0 : 0.1),
+      depthWrite: !transp
+    });
+  }
+
+  let center = new THREE.Vector3(0, 0, 0), radius = 100, dist = 400, yaw = 0.6, pitch = 0.3;
+  function updateCam(){
+    const cp = Math.cos(pitch), sp = Math.sin(pitch), cy = Math.cos(yaw), sy = Math.sin(yaw);
+    camera.position.set(center.x + dist*cp*sy, center.y + dist*sp, center.z + dist*cp*cy);
+    camera.lookAt(center);
+  }
+  function frameFromRoot(){
+    const box = new THREE.Box3().setFromObject(root);
+    if(!box.isEmpty()){ box.getCenter(center); const s = new THREE.Vector3(); box.getSize(s); radius = Math.max(s.x, s.y, s.z, 1) * 0.6; }
+    dist = (radius / Math.tan((camera.fov * Math.PI / 180) / 2)) * 1.9;
+    if(!isFinite(dist) || dist <= 0) dist = 400;
+    updateCam();
+  }
+  let dragging = false, px = 0, py = 0;
+  renderer.domElement.addEventListener('mousedown', e => { dragging = true; px = e.clientX; py = e.clientY; });
+  window.addEventListener('mouseup', () => dragging = false);
+  window.addEventListener('mousemove', e => { if(!dragging) return; yaw -= (e.clientX-px)*0.01; pitch += (e.clientY-py)*0.01; pitch = Math.max(-1.4, Math.min(1.4, pitch)); px = e.clientX; py = e.clientY; updateCam(); });
+  renderer.domElement.addEventListener('wheel', e => { e.preventDefault(); dist *= (1 + Math.sign(e.deltaY)*0.1); dist = Math.max(radius*0.03, dist); updateCam(); }, { passive: false });
+  window.addEventListener('resize', () => { camera.aspect = window.innerWidth/window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight); });
+
+  if(charArg){
+    const { loadCharacter, pieceTextureKey } = require('../src/engine/loader');
+    const { assembleCharacter } = require('../src/engine/scn_character');
+    const [charDir, gender] = charArg.slice('--char='.length).split('|');
+    let CH = loadCharacter(charDir, gender || 'male');
+    root.scale.z = -1;
+
+    const grid = new THREE.GridHelper(500, 16, 0x2a3440, 0x1c242c); scene.add(grid);
+    let meshes = [];
+    function build(pose){
+      for(const m of meshes){ root.remove(m); m.geometry.dispose(); }
+      meshes = [];
+      const pieces = assembleCharacter(CH.skel, CH.parts, pose);
+      for(const pc of pieces){
+        if(!pc.positions.length || !pc.indices.length) continue;
+        const g = new THREE.BufferGeometry();
+        g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(pc.positions), 3));
+        if(pc.uvs && pc.uvs.length === (pc.positions.length/3)*2) g.setAttribute('uv', new THREE.Float32BufferAttribute(pc.uvs, 2));
+        g.setIndex(pc.indices); g.computeVertexNormals();
+        const tex = getTex(CH.textures[pieceTextureKey(pc.dir, pc.texture)]);
+        const mesh = new THREE.Mesh(g, makeMat(tex, pc.renderFlag)); root.add(mesh); meshes.push(mesh);
+      }
+      frameFromRoot();
+    }
+    function updatePose(pose){
+      const pieces = assembleCharacter(CH.skel, CH.parts, pose);
+      for(let i = 0; i < meshes.length && i < pieces.length; i++){
+        const attr = meshes[i].geometry.getAttribute('position');
+        attr.array.set(pieces[i].positions); attr.needsUpdate = true;
+        meshes[i].geometry.computeVertexNormals();
+      }
+    }
+
+    let clipIdx = CH.animNames.indexOf('00008'); if(clipIdx < 0) clipIdx = Math.min(1, CH.animNames.length - 1);
+    let paused = false, startTime = performance.now();
+    const cur = () => CH.animNames[clipIdx] || CH.animNames[0] || 'BASE';
+    function ui(){
+      info.innerHTML = `${gender} · ${CH.skel.bones.length} bones · ${CH.animNames.length} clips<br>`;
+      const sel = document.createElement('select');
+      CH.animNames.forEach((n, i) => { const o = document.createElement('option'); o.value = i; o.textContent = n; sel.appendChild(o); });
+      sel.value = clipIdx;
+      sel.onchange = () => { clipIdx = Number(sel.value); startTime = performance.now(); };
+      const mk = (t, fn) => { const b = document.createElement('button'); b.textContent = t; b.onclick = fn; return b; };
+      info.appendChild(mk('◀', () => { clipIdx = (clipIdx-1+CH.animNames.length)%CH.animNames.length; sel.value = clipIdx; startTime = performance.now(); }));
+      info.appendChild(sel);
+      info.appendChild(mk('▶', () => { clipIdx = (clipIdx+1)%CH.animNames.length; sel.value = clipIdx; startTime = performance.now(); }));
+      info.appendChild(mk('⏯', () => { paused = !paused; }));
+      const hint = document.createElement('div'); hint.style.cssText='color:#7c8794;margin-top:4px;'; hint.textContent='drag rotate · wheel zoom · space pause'; info.appendChild(hint);
+    }
+    window.addEventListener('keydown', e => { if(e.key === ' '){ paused = !paused; e.preventDefault(); } });
+
+    build({ clipA: cur(), tickA: 0 });
+    ui();
+    function tick(now){ if(!paused) updatePose({ clipA: cur(), tickA: Math.floor(now - startTime) }); renderer.render(scene, camera); requestAnimationFrame(tick); }
+    requestAnimationFrame(tick);
+
+  } else {
+    let D = { name: '', meshes: [] };
+    if(scnArg){ D = JSON.parse(fs.readFileSync(scnArg.slice('--scn='.length), 'utf8')); }
+    const box = new THREE.Box3();
+    const morphs = [];
+    let drawn = 0;
+    for(const m of (D.meshes || [])){
+      if(!m.positions || !m.positions.length || !m.indices || !m.indices.length) continue;
+      const g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.Float32BufferAttribute(m.positions, 3));
+      if(m.uvs && m.uvs.length === (m.positions.length/3)*2) g.setAttribute('uv', new THREE.Float32BufferAttribute(m.uvs, 2));
+      g.setIndex(m.indices); g.computeVertexNormals(); g.computeBoundingBox();
+      if(g.boundingBox) box.union(g.boundingBox);
+      const tex = getTex(m.textureDataUrl);
+      root.add(new THREE.Mesh(g, makeMat(tex, m.renderFlag, m.name))); drawn++;
+      const ma = (m.anims || []).find(a => a.morph && a.morph.length);
+      if(ma) morphs.push({ attr: g.getAttribute('position'), base: Float32Array.from(m.positions), keys: ma.morph, dur: ma.duration || 1 });
+    }
+    if(!box.isEmpty()){ box.getCenter(center); const s = new THREE.Vector3(); box.getSize(s); radius = Math.max(s.x, s.y, s.z, 0.001) * 0.6; }
+    dist = (radius / Math.tan((camera.fov*Math.PI/180)/2)) * 1.9; if(!isFinite(dist) || dist <= 0) dist = 5;
+    updateCam();
+    let spin = false;
+    window.addEventListener('keydown', e => { if(e.key === ' '){ spin = !spin; e.preventDefault(); } if(e.key.toLowerCase() === 'w'){ root.traverse(o => { if(o.isMesh) o.material.wireframe = !o.material.wireframe; }); } });
+    const morphInfo = morphs.length ? ` · ${morphs.length} morph anim` : '';
+    info.innerHTML = `${D.name || ''}<br>${drawn} meshes${morphInfo}<br>drag rotate · wheel zoom · space spin · W wireframe`;
+    const t0 = performance.now();
+    function tick(){
+      if(spin) root.rotation.y += 0.005;
+      if(morphs.length){
+        const tms = performance.now() - t0;
+        for(const mo of morphs){
+          const t = tms % mo.dur;
+          let k = 0; while(k + 1 < mo.keys.length && mo.keys[k + 1].tick <= t) k++;
+          const applyKey = (arr, key) => { for(const mv of key.verts){ const o = mv.index * 3; if(o + 2 < arr.length){ arr[o] = mv.pos[0]; arr[o + 1] = mv.pos[1]; arr[o + 2] = mv.pos[2]; } } };
+          const w = mo.base.slice(); applyKey(w, mo.keys[k]);
+          const k1 = mo.keys[k + 1];
+          if(k1 && k1.tick > mo.keys[k].tick){
+            const a = (t - mo.keys[k].tick) / (k1.tick - mo.keys[k].tick);
+            const w1 = mo.base.slice(); applyKey(w1, k1);
+            for(let i = 0; i < w.length; i++) w[i] += (w1[i] - w[i]) * a;
+          }
+          mo.attr.array.set(w); mo.attr.needsUpdate = true;
+        }
+      }
+      renderer.render(scene, camera); requestAnimationFrame(tick);
+    }
+    tick();
+  }
+} catch(e){ fail(e); }
+</script>
+</body>
+</html>

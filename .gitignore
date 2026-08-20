@@ -1,0 +1,47 @@
+# dependencies
+node_modules/
+
+# local machine config (personal paths)
+path.init
+
+# heavy game resources / extracted data
+resources/
+_resources/
+resource_s4_todo/
+extracted_resources/
+resource.s4hd
+caveman/
+dbinfo/
+shop/
+xml/
+xigncode/
+XignCode-X3-Public-master/
+Lua decriptors/
+S4 shop tabs.txt
+
+# archives and dumps
+*.rar
+*.sql
+
+# build output
+dist/
+
+# IDE / tooling
+.vs/
+**/.vs/
+*.ipch
+.codex/
+.caveman/
+ui_inspector/
+
+
+S4League Resources Manager.exe
+S4League Resources Manager.exe
+S4League Resources Manager.exe
+
+
+__pycache__/
+*.pyc
+
+# documentacion generada del reversing de Season 1
+documentation_s1/
