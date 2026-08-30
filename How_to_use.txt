@@ -1,0 +1,67 @@
+========================================================================
+ Resources & Mods manager  -  How to use
+========================================================================
+
+FIRST TIME
+  Just run run.bat. The first time it installs the dependencies and rebuilds
+  the native modules, then starts the app. After that it just starts.
+  (You need Node.js installed: https://nodejs.org)
+
+------------------------------------------------------------------------
+ SET YOUR PATHS FIRST  (top bar -> Paths)
+------------------------------------------------------------------------
+  - Select Resource Folder : the client folder that has resource.s4hd
+                             (and the _resources folder).
+  - Source Folder          : the folder with your custom content
+                             (weapon/costume files, textures, etc).
+  - Select GameData Folder : the "data" folder of your emulator/server,
+                             where the game reads its xml/x7 tables.
+
+  Then press "Load Resources" to open the client resource tree.
+
+  Weapons and Costumes also register the item in the server database,
+  so fill the DB fields (host/user/pass/database + the item tables) and
+  turn the database toggle ON before adding them. Maps do not need it.
+
+------------------------------------------------------------------------
+ NORMAL WORKFLOW
+------------------------------------------------------------------------
+  Extract  ->  Add (weapon/costume/map)  ->  Pack
+
+  - Extract : unpacks resource.s4hd / _resources into extracted_resources
+              so the files can be edited.
+  - Add     : injects your new content (see below).
+  - Pack    : builds everything in extracted_resources back into
+              resource.s4hd + _resources so the client can read it.
+
+------------------------------------------------------------------------
+ ADD WEAPONS   (Add Tools -> Add Weapons)
+------------------------------------------------------------------------
+  1. Put the weapon files in your Source Folder.
+  2. Make sure Resource + GameData paths are set and the DB is ON.
+  3. Click Add Weapons.
+  It copies the weapon resources into the client and writes the item
+  info / weapon xml into GameData and the database.
+  4. Press Pack when you are done.
+
+------------------------------------------------------------------------
+ ADD COSTUMES   (Add Tools -> Add Costumes)
+------------------------------------------------------------------------
+  1. Put the costume files in your Source Folder.
+  2. Resource + GameData paths set, DB ON.
+  3. Click Add Costumes. It adds the costume resources and registers
+     the item so it shows in game.
+  4. Press Pack.
+
+------------------------------------------------------------------------
+ ADD MAPS   (Add Tools -> Add Maps)
+------------------------------------------------------------------------
+  1. Drop your map info files (.ini) in:  resources/maps/mapinfo/
+     and the preview image next to them.
+  2. Set the Resource Folder path.
+  3. Click Add Maps. It reads the .ini files, registers each map in the
+     client map list + name table, and enables its game modes.
+  4. Press Pack.
+
+  Note: a map id is a single byte, so ids stay between 2 and 255.
+========================================================================

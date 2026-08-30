@@ -1,0 +1,2199 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>S4 Animation Converter</title>
+
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        :root {
+            --bg: #0b0d10;
+            --panel: #11151a;
+            --panel-2: #161b21;
+            --border: #252c35;
+            --text: #f2f4f7;
+            --muted: #8c96a3;
+            --accent: #4f8cff;
+            --accent-hover: #6b9cff;
+            --danger: #ff5f56;
+            --success: #35c759;
+        }
+
+        body {
+            margin: 0;
+            min-height: 100vh;
+
+            background: var(--bg);
+            color: var(--text);
+
+            font-family:
+                Inter,
+                -apple-system,
+                BlinkMacSystemFont,
+                "Segoe UI",
+                sans-serif;
+        }
+
+        button,
+        input,
+        select {
+            font: inherit;
+        }
+
+        .app {
+            width: 100%;
+            min-height: 100vh;
+
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* HEADER */
+
+        header {
+            height: 64px;
+
+            display: flex;
+            align-items: center;
+
+            padding: 0 28px;
+
+            border-bottom: 1px solid var(--border);
+
+            background: #0d1014;
+        }
+
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .brand-icon {
+            width: 34px;
+            height: 34px;
+
+            display: flex;
+            align-items: center;
+            justify-content: center;
+
+            border-radius: 8px;
+
+            background: var(--accent);
+
+            font-weight: 800;
+            font-size: 14px;
+        }
+
+        .brand-title {
+            font-size: 15px;
+            font-weight: 700;
+        }
+
+        .brand-subtitle {
+            color: var(--muted);
+            font-size: 12px;
+            margin-top: 2px;
+        }
+
+        /* MAIN */
+
+        main {
+            width: min(1250px, calc(100% - 40px));
+
+            margin: 0 auto;
+
+            padding: 32px 0 50px;
+        }
+
+        .page-title {
+            margin-bottom: 26px;
+        }
+
+        .page-title h1 {
+            margin: 0;
+
+            font-size: 25px;
+            letter-spacing: -0.5px;
+        }
+
+        .page-title p {
+            margin: 7px 0 0;
+
+            color: var(--muted);
+
+            font-size: 13px;
+        }
+
+        /* GRID */
+
+        .grid {
+            display: grid;
+
+            grid-template-columns: 380px 1fr;
+
+            gap: 18px;
+
+            align-items: start;
+        }
+
+        .panel {
+            background: var(--panel);
+
+            border: 1px solid var(--border);
+
+            border-radius: 10px;
+
+            overflow: hidden;
+        }
+
+        .panel-header {
+            height: 48px;
+
+            display: flex;
+            align-items: center;
+
+            padding: 0 18px;
+
+            border-bottom: 1px solid var(--border);
+
+            font-size: 13px;
+            font-weight: 700;
+        }
+
+        .panel-body {
+            padding: 18px;
+        }
+
+        /* FORM */
+
+        .field {
+            margin-bottom: 18px;
+        }
+
+        .field:last-child {
+            margin-bottom: 0;
+        }
+
+        .label {
+            display: block;
+
+            margin-bottom: 8px;
+
+            color: #c6ccd4;
+
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        select,
+        input[type="text"] {
+            width: 100%;
+            height: 40px;
+
+            padding: 0 12px;
+
+            border: 1px solid var(--border);
+            border-radius: 7px;
+
+            outline: none;
+
+            background: var(--panel-2);
+            color: var(--text);
+
+            font-size: 13px;
+        }
+
+        select:focus,
+        input[type="text"]:focus {
+            border-color: var(--accent);
+        }
+
+        /* FILE */
+
+        .file-box {
+            display: flex;
+            align-items: center;
+
+            min-height: 40px;
+
+            border: 1px dashed #303945;
+
+            border-radius: 7px;
+
+            background: var(--panel-2);
+
+            overflow: hidden;
+        }
+
+        .file-box input {
+            display: none;
+        }
+
+        .file-button {
+            height: 40px;
+
+            display: flex;
+            align-items: center;
+
+            padding: 0 12px;
+
+            border: 0;
+            border-right: 1px solid var(--border);
+
+            background: #1b2128;
+
+            color: #dce1e7;
+
+            font-size: 12px;
+
+            cursor: pointer;
+        }
+
+        .file-button:hover {
+            background: #222a33;
+        }
+
+        .file-name {
+            padding: 0 12px;
+
+            color: var(--muted);
+
+            font-size: 12px;
+
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        /* SKELETON */
+
+        .skeleton-info {
+            margin-top: 18px;
+
+            padding: 12px;
+
+            border: 1px solid var(--border);
+            border-radius: 7px;
+
+            background: #0e1216;
+        }
+
+        .info-row {
+            display: flex;
+            justify-content: space-between;
+
+            padding: 5px 0;
+
+            font-size: 12px;
+        }
+
+        .info-row span:first-child {
+            color: var(--muted);
+        }
+
+        .info-row span:last-child {
+            color: #dfe4ea;
+        }
+
+        /* MAPPING */
+
+        .mapping-toolbar {
+            display: flex;
+            gap: 8px;
+
+            margin-bottom: 12px;
+        }
+
+        .search {
+            flex: 1;
+        }
+
+        .mapping-list {
+            max-height: 570px;
+
+            overflow-y: auto;
+
+            border: 1px solid var(--border);
+
+            border-radius: 8px;
+        }
+
+        .mapping-row {
+            display: grid;
+
+            grid-template-columns: 1fr 25px 1fr;
+
+            align-items: center;
+
+            min-height: 48px;
+
+            padding: 6px 10px;
+
+            border-bottom: 1px solid #20262e;
+        }
+
+        .mapping-row:last-child {
+            border-bottom: 0;
+        }
+
+        .mapping-bone {
+            font-size: 12px;
+
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .mapping-bone small {
+            display: block;
+
+            margin-top: 2px;
+
+            color: var(--muted);
+
+            font-size: 10px;
+        }
+
+        .arrow {
+            color: #596573;
+
+            text-align: center;
+        }
+
+        .mapping-select {
+            width: 100%;
+            height: 32px;
+
+            padding: 0 8px;
+
+            font-size: 11px;
+        }
+
+        /* STATUS */
+
+        .status {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+
+            margin-top: 14px;
+
+            color: var(--muted);
+
+            font-size: 11px;
+        }
+
+        .status-dot {
+            width: 7px;
+            height: 7px;
+
+            border-radius: 50%;
+
+            background: #68717c;
+        }
+
+        .status-dot.success {
+            background: var(--success);
+        }
+
+        .status-dot.error {
+            background: var(--danger);
+        }
+
+        /* BUTTONS */
+
+        .actions {
+            display: flex;
+            gap: 10px;
+
+            margin-top: 18px;
+        }
+
+        button {
+            height: 40px;
+
+            padding: 0 16px;
+
+            border: 1px solid var(--border);
+
+            border-radius: 7px;
+
+            background: #191f26;
+
+            color: #e8ebef;
+
+            cursor: pointer;
+
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        button:hover {
+            background: #222a33;
+        }
+
+        .primary {
+            flex: 1;
+
+            border-color: var(--accent);
+
+            background: var(--accent);
+
+            color: white;
+        }
+
+        .primary:hover {
+            background: var(--accent-hover);
+        }
+
+        .primary:disabled {
+            opacity: .45;
+
+            cursor: not-allowed;
+        }
+
+        /* CLIP INFO */
+
+        .clip-info {
+            display: grid;
+
+            grid-template-columns: repeat(3, 1fr);
+
+            gap: 10px;
+
+            margin-top: 14px;
+        }
+
+        .clip-stat {
+            padding: 12px;
+
+            border: 1px solid var(--border);
+
+            border-radius: 7px;
+
+            background: #0e1216;
+        }
+
+        .clip-stat-label {
+            color: var(--muted);
+
+            font-size: 10px;
+        }
+
+        .clip-stat-value {
+            margin-top: 5px;
+
+            font-size: 13px;
+            font-weight: 700;
+        }
+
+        /* LOG */
+
+        .log {
+            margin-top: 18px;
+
+            padding: 12px;
+
+            height: 120px;
+
+            overflow-y: auto;
+
+            border: 1px solid var(--border);
+
+            border-radius: 7px;
+
+            background: #080a0c;
+
+            color: #98a3af;
+
+            font-family: Consolas, monospace;
+
+            font-size: 11px;
+            line-height: 1.6;
+        }
+
+        .log-line {
+            white-space: pre-wrap;
+        }
+
+        .log-success {
+            color: var(--success);
+        }
+
+        .log-error {
+            color: var(--danger);
+        }
+
+        /* RESPONSIVE */
+
+        @media (max-width: 900px) {
+            .grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+<div class="app">
+
+    <!-- HEADER -->
+
+    <header>
+        <div class="brand">
+
+            <div class="brand-icon">
+                S4
+            </div>
+
+            <div>
+                <div class="brand-title">
+                    S4 Animation Converter
+                </div>
+
+                <div class="brand-subtitle">
+                    Mixamo → Bip01 / SCN
+                </div>
+            </div>
+
+        </div>
+    </header>
+
+
+    <!-- MAIN -->
+
+    <main>
+
+        <div class="page-title">
+            <h1>Animation Converter</h1>
+
+            <p>
+                Reemplaza un clip existente del skeleton Bip01 utilizando una animación de Mixamo.
+            </p>
+        </div>
+
+
+        <div class="grid">
+
+
+            <!-- LEFT -->
+
+            <section class="panel">
+
+                <div class="panel-header">
+                    Source
+                </div>
+
+                <div class="panel-body">
+
+
+                    <!-- SKELETON -->
+
+                    <div class="field">
+
+                        <label class="label">
+                            Skeleton
+                        </label>
+
+                        <select id="skeletonType">
+
+                            <option value="female">
+                                Female Bip01
+                            </option>
+
+                            <option value="male">
+                                Male Bip01
+                            </option>
+
+                        </select>
+
+                    </div>
+
+
+                    <!-- SCN -->
+
+                    <div class="field">
+
+                        <label class="label">
+                            SCN file
+                        </label>
+
+                        <div class="file-box">
+
+                            <label class="file-button">
+
+                                Open SCN
+
+                                <input
+                                    type="file"
+                                    id="scnFile"
+                                    accept=".scn,.json"
+                                >
+
+                            </label>
+
+                            <div
+                                class="file-name"
+                                id="scnFileName"
+                            >
+                                No file selected
+                            </div>
+
+                        </div>
+
+                    </div>
+
+
+                    <!-- CLIP -->
+
+                    <div class="field">
+
+                        <label class="label">
+                            Animation / Clip
+                        </label>
+
+                        <select id="clipSelect">
+
+                            <option value="">
+                                Load a SCN first
+                            </option>
+
+                        </select>
+
+                    </div>
+
+
+                    <!-- MIXAMO -->
+
+                    <div class="field">
+
+                        <label class="label">
+                            Mixamo animation
+                        </label>
+
+                        <div class="file-box">
+
+                            <label class="file-button">
+
+                                Open FBX / JSON
+
+                                <input
+                                    type="file"
+                                    id="mixamoFile"
+                                    accept=".fbx,.json"
+                                >
+
+                            </label>
+
+                            <div
+                                class="file-name"
+                                id="mixamoFileName"
+                            >
+                                No file selected
+                            </div>
+
+                        </div>
+
+                    </div>
+
+
+                    <!-- SKELETON INFO -->
+
+                    <div class="skeleton-info">
+
+                        <div class="info-row">
+                            <span>Skeleton</span>
+                            <span id="infoSkeleton">—</span>
+                        </div>
+
+                        <div class="info-row">
+                            <span>Bones</span>
+                            <span id="infoBones">—</span>
+                        </div>
+
+                        <div class="info-row">
+                            <span>Clips</span>
+                            <span id="infoClips">—</span>
+                        </div>
+
+                        <div class="info-row">
+                            <span>Mixamo bones</span>
+                            <span id="infoMixamoBones">—</span>
+                        </div>
+
+                    </div>
+
+
+                    <div class="actions">
+
+                        <button
+                            id="autoMapBtn"
+                            type="button"
+                        >
+                            Auto Map
+                        </button>
+
+                        <button
+                            id="convertBtn"
+                            class="primary"
+                            type="button"
+                            disabled
+                        >
+                            Convert Animation
+                        </button>
+
+                    </div>
+
+
+                    <div class="status">
+
+                        <div
+                            id="statusDot"
+                            class="status-dot"
+                        ></div>
+
+                        <span id="statusText">
+                            Waiting for files...
+                        </span>
+
+                    </div>
+
+                </div>
+
+            </section>
+
+
+            <!-- RIGHT -->
+
+            <section class="panel">
+
+                <div class="panel-header">
+                    Bone Mapping
+                </div>
+
+                <div class="panel-body">
+
+                    <div class="mapping-toolbar">
+
+                        <input
+                            id="mappingSearch"
+                            class="search"
+                            type="text"
+                            placeholder="Search bone..."
+                        >
+
+                        <button
+                            id="resetMapping"
+                            type="button"
+                        >
+                            Reset
+                        </button>
+
+                    </div>
+
+
+                    <div
+                        id="mappingList"
+                        class="mapping-list"
+                    >
+
+                        <div
+                            style="
+                                padding:40px;
+                                text-align:center;
+                                color:#697482;
+                                font-size:12px;
+                            "
+                        >
+                            Load a SCN and Mixamo animation.
+                        </div>
+
+                    </div>
+
+
+                    <!-- CLIP STATS -->
+
+                    <div class="clip-info">
+
+                        <div class="clip-stat">
+
+                            <div class="clip-stat-label">
+                                Selected clip
+                            </div>
+
+                            <div
+                                class="clip-stat-value"
+                                id="statClip"
+                            >
+                                —
+                            </div>
+
+                        </div>
+
+                        <div class="clip-stat">
+
+                            <div class="clip-stat-label">
+                                Frames
+                            </div>
+
+                            <div
+                                class="clip-stat-value"
+                                id="statFrames"
+                            >
+                                —
+                            </div>
+
+                        </div>
+
+                        <div class="clip-stat">
+
+                            <div class="clip-stat-label">
+                                FPS
+                            </div>
+
+                            <div
+                                class="clip-stat-value"
+                                id="statFps"
+                            >
+                                —
+                            </div>
+
+                        </div>
+
+                    </div>
+
+
+                    <!-- LOG -->
+
+                    <div
+                        id="log"
+                        class="log"
+                    >
+                        <div class="log-line">
+                            Ready.
+                        </div>
+                    </div>
+
+                </div>
+
+            </section>
+
+        </div>
+
+    </main>
+
+</div>
+
+
+<script>
+
+"use strict";
+
+
+/*
+==========================================================
+ STATE
+==========================================================
+*/
+
+const state = {
+
+    scn: null,
+
+    mixamo: null,
+
+    scnFile: null,
+
+    mixamoFile: null,
+
+    skeletonType: "female",
+
+    selectedClip: "",
+
+    mapping: {}
+
+};
+
+
+/*
+==========================================================
+ DEFAULT MIXAMO → BIP01 MAPPING
+==========================================================
+*/
+
+const DEFAULT_MAPPING = {
+
+    "mixamorigHips":
+        "Bip01",
+
+    "mixamorigSpine":
+        "Bip01 Spine",
+
+    "mixamorigSpine1":
+        "Bip01 Spine1",
+
+    "mixamorigSpine2":
+        "Bip01 Spine2",
+
+    "mixamorigNeck":
+        "Bip01 Neck",
+
+    "mixamorigHead":
+        "Bip01 Head",
+
+
+    "mixamorigLeftShoulder":
+        "Bip01 L Clavicle",
+
+    "mixamorigLeftArm":
+        "Bip01 L UpperArm",
+
+    "mixamorigLeftForeArm":
+        "Bip01 L Forearm",
+
+    "mixamorigLeftHand":
+        "Bip01 L Hand",
+
+
+    "mixamorigRightShoulder":
+        "Bip01 R Clavicle",
+
+    "mixamorigRightArm":
+        "Bip01 R UpperArm",
+
+    "mixamorigRightForeArm":
+        "Bip01 R Forearm",
+
+    "mixamorigRightHand":
+        "Bip01 R Hand",
+
+
+    "mixamorigLeftUpLeg":
+        "Bip01 L Thigh",
+
+    "mixamorigLeftLeg":
+        "Bip01 L Calf",
+
+    "mixamorigLeftFoot":
+        "Bip01 L Foot",
+
+    "mixamorigLeftToeBase":
+        "Bip01 L Toe0",
+
+
+    "mixamorigRightUpLeg":
+        "Bip01 R Thigh",
+
+    "mixamorigRightLeg":
+        "Bip01 R Calf",
+
+    "mixamorigRightFoot":
+        "Bip01 R Foot",
+
+    "mixamorigRightToeBase":
+        "Bip01 R Toe0"
+
+};
+
+
+/*
+==========================================================
+ DOM
+==========================================================
+*/
+
+const skeletonType =
+    document.getElementById("skeletonType");
+
+const scnFile =
+    document.getElementById("scnFile");
+
+const mixamoFile =
+    document.getElementById("mixamoFile");
+
+const scnFileName =
+    document.getElementById("scnFileName");
+
+const mixamoFileName =
+    document.getElementById("mixamoFileName");
+
+const clipSelect =
+    document.getElementById("clipSelect");
+
+const mappingList =
+    document.getElementById("mappingList");
+
+const mappingSearch =
+    document.getElementById("mappingSearch");
+
+const autoMapBtn =
+    document.getElementById("autoMapBtn");
+
+const resetMapping =
+    document.getElementById("resetMapping");
+
+const convertBtn =
+    document.getElementById("convertBtn");
+
+const statusDot =
+    document.getElementById("statusDot");
+
+const statusText =
+    document.getElementById("statusText");
+
+const log =
+    document.getElementById("log");
+
+
+/*
+==========================================================
+ LOG
+==========================================================
+*/
+
+function writeLog(message, type = "") {
+
+    const line =
+        document.createElement("div");
+
+    line.className =
+        "log-line " +
+        (type ? `log-${type}` : "");
+
+    line.textContent =
+        message;
+
+    log.appendChild(line);
+
+    log.scrollTop =
+        log.scrollHeight;
+}
+
+
+/*
+==========================================================
+ STATUS
+==========================================================
+*/
+
+function setStatus(message, type = "") {
+
+    statusText.textContent =
+        message;
+
+    statusDot.className =
+        "status-dot";
+
+    if (type)
+        statusDot.classList.add(type);
+}
+
+
+/*
+==========================================================
+ SCN LOAD
+==========================================================
+*/
+
+scnFile.addEventListener("change", async event => {
+
+    const file =
+        event.target.files[0];
+
+    if (!file)
+        return;
+
+    state.scnFile =
+        file;
+
+    scnFileName.textContent =
+        file.name;
+
+    try {
+
+        const text =
+            await file.text();
+
+        const data =
+            JSON.parse(text);
+
+        state.scn =
+            data;
+
+        loadSCN(data);
+
+        writeLog(
+            `SCN loaded: ${file.name}`,
+            "success"
+        );
+
+        setStatus(
+            "SCN loaded successfully",
+            "success"
+        );
+
+    } catch (error) {
+
+        console.error(error);
+
+        writeLog(
+            "Failed to read SCN: " + error.message,
+            "error"
+        );
+
+        setStatus(
+            "Invalid SCN / JSON",
+            "error"
+        );
+
+    }
+
+});
+
+
+/*
+==========================================================
+ LOAD SCN
+==========================================================
+*/
+
+function loadSCN(data) {
+
+    const bones =
+        Array.isArray(data.bones)
+            ? data.bones
+            : [];
+
+    document.getElementById(
+        "infoSkeleton"
+    ).textContent =
+        state.skeletonType === "female"
+            ? "Female Bip01"
+            : "Male Bip01";
+
+    document.getElementById(
+        "infoBones"
+    ).textContent =
+        bones.length;
+
+
+    /*
+    ------------------------------------------------------
+    COLLECT CLIPS
+    ------------------------------------------------------
+    */
+
+    const clips =
+        new Set();
+
+    for (const bone of bones) {
+
+        if (!Array.isArray(bone.clips))
+            continue;
+
+        for (const clip of bone.clips)
+            clips.add(clip);
+
+    }
+
+    clipSelect.innerHTML = "";
+
+    if (clips.size === 0) {
+
+        const option =
+            document.createElement("option");
+
+        option.textContent =
+            "No clips found";
+
+        option.value =
+            "";
+
+        clipSelect.appendChild(option);
+
+    } else {
+
+        for (const clip of clips) {
+
+            const option =
+                document.createElement("option");
+
+            option.value =
+                clip;
+
+            option.textContent =
+                clip;
+
+            clipSelect.appendChild(option);
+
+        }
+
+        state.selectedClip =
+            [...clips][0];
+
+    }
+
+    document.getElementById(
+        "infoClips"
+    ).textContent =
+        clips.size;
+
+    updateClipStats();
+
+    renderMapping();
+
+    updateConvertState();
+}
+
+
+/*
+==========================================================
+ MIXAMO LOAD
+==========================================================
+*/
+
+mixamoFile.addEventListener("change", async event => {
+
+    const file =
+        event.target.files[0];
+
+    if (!file)
+        return;
+
+    state.mixamoFile =
+        file;
+
+    mixamoFileName.textContent =
+        file.name;
+
+
+    /*
+    ------------------------------------------------------
+    JSON
+    ------------------------------------------------------
+    */
+
+    if (file.name.toLowerCase().endsWith(".json")) {
+
+        try {
+
+            const text =
+                await file.text();
+
+            state.mixamo =
+                JSON.parse(text);
+
+            loadMixamo(
+                state.mixamo
+            );
+
+        } catch (error) {
+
+            writeLog(
+                "Invalid Mixamo JSON: " +
+                error.message,
+                "error"
+            );
+
+        }
+
+    } else {
+
+        /*
+        --------------------------------------------------
+        FBX
+        --------------------------------------------------
+
+        Aquí posteriormente conectamos THREE.FBXLoader.
+        --------------------------------------------------
+        */
+
+        state.mixamo = null;
+
+        document.getElementById(
+            "infoMixamoBones"
+        ).textContent =
+            "FBX";
+
+        writeLog(
+            "FBX selected. FBX parser must be connected.",
+        );
+
+        setStatus(
+            "FBX loaded — parser pending"
+        );
+
+        updateConvertState();
+
+    }
+
+});
+
+
+/*
+==========================================================
+ LOAD MIXAMO JSON
+==========================================================
+*/
+
+function loadMixamo(data) {
+
+    let bones = [];
+
+    if (Array.isArray(data.bones))
+        bones = data.bones;
+
+    else if (data.skeleton &&
+             Array.isArray(data.skeleton.bones))
+        bones = data.skeleton.bones;
+
+
+    document.getElementById(
+        "infoMixamoBones"
+    ).textContent =
+        bones.length;
+
+
+    /*
+    ------------------------------------------------------
+    INITIAL MAPPING
+    ------------------------------------------------------
+    */
+
+    state.mapping = {};
+
+    for (const bone of bones) {
+
+        state.mapping[bone.name] =
+            DEFAULT_MAPPING[bone.name] || "";
+
+    }
+
+    renderMapping();
+
+    writeLog(
+        `Mixamo loaded: ${bones.length} bones`,
+        "success"
+    );
+
+    setStatus(
+        "Mixamo animation loaded",
+        "success"
+    );
+
+    updateConvertState();
+}
+
+
+/*
+==========================================================
+ GET SCN BONE NAMES
+==========================================================
+*/
+
+function getSCNBones() {
+
+    if (!state.scn ||
+        !Array.isArray(state.scn.bones))
+        return [];
+
+    return state.scn.bones.map(
+        bone => bone.name
+    );
+
+}
+
+
+/*
+==========================================================
+ GET MIXAMO BONE NAMES
+==========================================================
+*/
+
+function getMixamoBones() {
+
+    if (!state.mixamo)
+        return [];
+
+    if (Array.isArray(state.mixamo.bones))
+        return state.mixamo.bones;
+
+    if (
+        state.mixamo.skeleton &&
+        Array.isArray(state.mixamo.skeleton.bones)
+    )
+        return state.mixamo.skeleton.bones;
+
+    return [];
+
+}
+
+
+/*
+==========================================================
+ RENDER MAPPING
+==========================================================
+*/
+
+function renderMapping() {
+
+    const bones =
+        getMixamoBones();
+
+    if (!bones.length) {
+
+        mappingList.innerHTML = `
+            <div style="
+                padding:40px;
+                text-align:center;
+                color:#697482;
+                font-size:12px;
+            ">
+                Load a Mixamo JSON animation.
+            </div>
+        `;
+
+        return;
+    }
+
+
+    const scnBones =
+        getSCNBones();
+
+
+    mappingList.innerHTML = "";
+
+
+    for (const bone of bones) {
+
+        const name =
+            typeof bone === "string"
+                ? bone
+                : bone.name;
+
+
+        const row =
+            document.createElement("div");
+
+        row.className =
+            "mapping-row";
+
+
+        /*
+        --------------------------------------------------
+        MIXAMO NAME
+        --------------------------------------------------
+        */
+
+        const source =
+            document.createElement("div");
+
+        source.className =
+            "mapping-bone";
+
+        source.innerHTML = `
+            ${name}
+            <small>Mixamo</small>
+        `;
+
+
+        /*
+        --------------------------------------------------
+        ARROW
+        --------------------------------------------------
+        */
+
+        const arrow =
+            document.createElement("div");
+
+        arrow.className =
+            "arrow";
+
+        arrow.textContent =
+            "→";
+
+
+        /*
+        --------------------------------------------------
+        SELECT
+        --------------------------------------------------
+        */
+
+        const select =
+            document.createElement("select");
+
+        select.className =
+            "mapping-select";
+
+
+        const empty =
+            document.createElement("option");
+
+        empty.value = "";
+
+        empty.textContent =
+            "Ignore bone";
+
+        select.appendChild(empty);
+
+
+        for (const scnBone of scnBones) {
+
+            const option =
+                document.createElement("option");
+
+            option.value =
+                scnBone;
+
+            option.textContent =
+                scnBone;
+
+            select.appendChild(option);
+
+        }
+
+
+        select.value =
+            state.mapping[name] || "";
+
+
+        select.addEventListener(
+            "change",
+            () => {
+
+                state.mapping[name] =
+                    select.value;
+
+                updateConvertState();
+
+            }
+        );
+
+
+        row.appendChild(source);
+
+        row.appendChild(arrow);
+
+        row.appendChild(select);
+
+        row.dataset.bone =
+            name.toLowerCase();
+
+        mappingList.appendChild(row);
+
+    }
+
+}
+
+
+/*
+==========================================================
+ AUTO MAP
+==========================================================
+*/
+
+autoMapBtn.addEventListener(
+    "click",
+    () => {
+
+        const bones =
+            getMixamoBones();
+
+        if (!bones.length) {
+
+            writeLog(
+                "No Mixamo bones loaded.",
+                "error"
+            );
+
+            return;
+        }
+
+
+        const scnNames =
+            getSCNBones();
+
+
+        for (const bone of bones) {
+
+            const name =
+                typeof bone === "string"
+                    ? bone
+                    : bone.name;
+
+
+            /*
+            ----------------------------------------------
+            EXACT DEFAULT
+            ----------------------------------------------
+            */
+
+            if (DEFAULT_MAPPING[name]) {
+
+                if (
+                    scnNames.includes(
+                        DEFAULT_MAPPING[name]
+                    )
+                ) {
+
+                    state.mapping[name] =
+                        DEFAULT_MAPPING[name];
+
+                    continue;
+                }
+
+            }
+
+
+            /*
+            ----------------------------------------------
+            NORMALIZED SEARCH
+            ----------------------------------------------
+            */
+
+            const normalized =
+                normalizeBoneName(name);
+
+
+            let best =
+                scnNames.find(
+                    scn =>
+                        normalizeBoneName(scn)
+                        === normalized
+                );
+
+
+            if (!best) {
+
+                best =
+                    fuzzyBoneMatch(
+                        name,
+                        scnNames
+                    );
+
+            }
+
+
+            state.mapping[name] =
+                best || "";
+
+        }
+
+
+        renderMapping();
+
+        writeLog(
+            "Automatic bone mapping completed.",
+            "success"
+        );
+
+    }
+);
+
+
+/*
+==========================================================
+ NORMALIZE BONE
+==========================================================
+*/
+
+function normalizeBoneName(name) {
+
+    return name
+        .replace(/^mixamorig[:_]?/i, "")
+        .replace(/^Bip01[\s_:]*/i, "")
+        .replace(/[^a-z0-9]/gi, "")
+        .toLowerCase();
+
+}
+
+
+/*
+==========================================================
+ FUZZY MATCH
+==========================================================
+*/
+
+function fuzzyBoneMatch(
+    source,
+    targets
+) {
+
+    const src =
+        normalizeBoneName(source);
+
+
+    for (const target of targets) {
+
+        const dst =
+            normalizeBoneName(target);
+
+
+        if (
+            dst.includes(src) ||
+            src.includes(dst)
+        )
+            return target;
+
+    }
+
+
+    return "";
+}
+
+
+/*
+==========================================================
+ RESET
+==========================================================
+*/
+
+resetMapping.addEventListener(
+    "click",
+    () => {
+
+        const bones =
+            getMixamoBones();
+
+        state.mapping = {};
+
+        for (const bone of bones) {
+
+            const name =
+                typeof bone === "string"
+                    ? bone
+                    : bone.name;
+
+            state.mapping[name] =
+                DEFAULT_MAPPING[name] || "";
+
+        }
+
+        renderMapping();
+
+        writeLog(
+            "Mapping reset."
+        );
+
+    }
+);
+
+
+/*
+==========================================================
+ SEARCH
+==========================================================
+*/
+
+mappingSearch.addEventListener(
+    "input",
+    () => {
+
+        const search =
+            mappingSearch.value
+                .toLowerCase()
+                .trim();
+
+
+        const rows =
+            mappingList.querySelectorAll(
+                ".mapping-row"
+            );
+
+
+        for (const row of rows) {
+
+            const bone =
+                row.dataset.bone || "";
+
+            row.style.display =
+                !search ||
+                bone.includes(search)
+                    ? "grid"
+                    : "none";
+
+        }
+
+    }
+);
+
+
+/*
+==========================================================
+ CLIP
+==========================================================
+*/
+
+clipSelect.addEventListener(
+    "change",
+    () => {
+
+        state.selectedClip =
+            clipSelect.value;
+
+        updateClipStats();
+
+        updateConvertState();
+
+    }
+);
+
+
+/*
+==========================================================
+ CLIP STATS
+==========================================================
+*/
+
+function updateClipStats() {
+
+    const clip =
+        state.selectedClip;
+
+    document.getElementById(
+        "statClip"
+    ).textContent =
+        clip || "—";
+
+
+    /*
+    ------------------------------------------------------
+    Aquí podremos leer posteriormente:
+
+        frame count
+        fps
+        duration
+
+    directamente de la animación.
+    ------------------------------------------------------
+    */
+
+    document.getElementById(
+        "statFrames"
+    ).textContent =
+        "—";
+
+    document.getElementById(
+        "statFps"
+    ).textContent =
+        "—";
+
+}
+
+
+/*
+==========================================================
+ CONVERT STATE
+==========================================================
+*/
+
+function updateConvertState() {
+
+    convertBtn.disabled =
+        !state.scn ||
+        !state.mixamo ||
+        !state.selectedClip;
+
+}
+
+
+/*
+==========================================================
+ CONVERT
+==========================================================
+*/
+
+convertBtn.addEventListener(
+    "click",
+    async () => {
+
+        if (!state.scn)
+            return;
+
+        if (!state.mixamo)
+            return;
+
+        if (!state.selectedClip)
+            return;
+
+
+        writeLog(
+            `Converting clip "${state.selectedClip}"...`
+        );
+
+        setStatus(
+            "Converting animation..."
+        );
+
+
+        /*
+        ==================================================
+        AQUÍ VA LA PARTE IMPORTANTE
+        ==================================================
+
+        1. Obtener keyframes Mixamo
+        2. Obtener matriz de cada bone
+        3. Convertir XYZ → matriz
+        4. Aplicar orientación del skeleton Bip01
+        5. Mantener las posiciones/base del SCN
+        6. Escribir las matrices en el clip
+        7. No tocar otros clips
+        ==================================================
+        */
+
+
+        try {
+
+            const result =
+                convertAnimation(
+                    state.scn,
+                    state.mixamo,
+                    state.mapping,
+                    state.selectedClip
+                );
+
+
+            downloadJSON(
+                result,
+                buildOutputName()
+            );
+
+
+            writeLog(
+                "Animation converted successfully.",
+                "success"
+            );
+
+            setStatus(
+                "Conversion completed",
+                "success"
+            );
+
+        } catch (error) {
+
+            console.error(error);
+
+            writeLog(
+                "Conversion failed: " +
+                error.message,
+                "error"
+            );
+
+            setStatus(
+                "Conversion failed",
+                "error"
+            );
+
+        }
+
+    }
+);
+
+
+/*
+==========================================================
+ CONVERTER
+==========================================================
+*/
+
+function convertAnimation(
+    scn,
+    mixamo,
+    mapping,
+    clip
+) {
+
+    /*
+    ------------------------------------------------------
+    IMPORTANTE
+
+    No modificamos el objeto original directamente.
+    ------------------------------------------------------
+    */
+
+    const output =
+        structuredClone(scn);
+
+
+    /*
+    ------------------------------------------------------
+    Por ahora copiamos la estructura.
+
+    Aquí se conecta el conversor real de matrices.
+    ------------------------------------------------------
+    */
+
+    for (const scnBone of output.bones || []) {
+
+        const mixamoName =
+            Object.keys(mapping)
+                .find(
+                    key =>
+                        mapping[key] === scnBone.name
+                );
+
+
+        if (!mixamoName)
+            continue;
+
+
+        /*
+        Aquí:
+
+            Mixamo keyframe
+                ↓
+            local transform
+                ↓
+            Bip01 transform
+                ↓
+            4x4 matrix
+                ↓
+            SCN clip
+
+        */
+
+
+        /*
+        --------------------------------------------------
+        NO tocamos otros clips.
+        --------------------------------------------------
+        */
+
+    }
+
+
+    return output;
+
+}
+
+
+/*
+==========================================================
+ OUTPUT NAME
+==========================================================
+*/
+
+function buildOutputName() {
+
+    const original =
+        state.scnFile
+            ? state.scnFile.name
+            : "output.scn";
+
+
+    const base =
+        original
+            .replace(/\.[^/.]+$/, "");
+
+
+    return (
+        base +
+        "_" +
+        state.selectedClip +
+        "_converted.json"
+    );
+
+}
+
+
+/*
+==========================================================
+ DOWNLOAD
+==========================================================
+*/
+
+function downloadJSON(
+    data,
+    filename
+) {
+
+    const blob =
+        new Blob(
+            [
+                JSON.stringify(
+                    data,
+                    null,
+                    2
+                )
+            ],
+            {
+                type:
+                    "application/json"
+            }
+        );
+
+
+    const url =
+        URL.createObjectURL(blob);
+
+
+    const a =
+        document.createElement("a");
+
+    a.href =
+        url;
+
+    a.download =
+        filename;
+
+    a.click();
+
+
+    URL.revokeObjectURL(url);
+
+}
+
+
+/*
+==========================================================
+ SKELETON TYPE
+==========================================================
+*/
+
+skeletonType.addEventListener(
+    "change",
+    () => {
+
+        state.skeletonType =
+            skeletonType.value;
+
+        document.getElementById(
+            "infoSkeleton"
+        ).textContent =
+            skeletonType.value === "female"
+                ? "Female Bip01"
+                : "Male Bip01";
+
+        writeLog(
+            `Skeleton selected: ${
+                skeletonType.value === "female"
+                    ? "Female Bip01"
+                    : "Male Bip01"
+            }`
+        );
+
+    }
+);
+
+
+/*
+==========================================================
+ INITIAL
+==========================================================
+*/
+
+setStatus(
+    "Waiting for files..."
+);
+
+</script>
+
+</body>
+</html>

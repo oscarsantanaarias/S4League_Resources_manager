@@ -1,0 +1,53 @@
+{
+  "name": "s4league-resources-manager",
+  "version": "1.0.0",
+  "main": "main.js",
+  "description": "S4League Resources & Mods Manager",
+  "author": "",
+  "license": "ISC",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder"
+  },
+  "keywords": [],
+  "dependencies": {
+    "@xmldom/xmldom": "^0.9.10",
+    "buffer-crc32": "^1.0.0",
+    "chokidar": "^4.0.3",
+    "iconv-lite": "^0.7.2",
+    "kisa-seed": "^1.0.1",
+    "lzo-decompress": "^1.0.11",
+    "lzo1x": "^1.0.1",
+    "mysql2": "^3.14.1",
+    "pngjs": "^7.0.0",
+    "pretty-data": "^0.40.0",
+    "three": "^0.185.1"
+  },
+  "devDependencies": {
+    "electron": "^37.1.0",
+    "electron-builder": "^26.8.1",
+    "electron-reload": "^2.0.0-alpha.1"
+  },
+  "build": {
+    "appId": "com.s4league.resourcesmanager",
+    "npmRebuild": false,
+    "productName": "S4League Resources & Mods Manager",
+    "icon": "build/icon.ico",
+    "directories": {
+      "output": "dist"
+    },
+    "win": {
+      "target": "portable",
+      "icon": "build/icon.ico"
+    },
+    "extraResources": [
+      {
+        "from": "tools/unlicense",
+        "to": "tools/unlicense",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ]
+  }
+}

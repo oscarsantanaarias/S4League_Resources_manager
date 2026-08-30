@@ -1,0 +1,748 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>SCN 3D Preview</title>
+<style>
+  html,body{margin:0;height:100%;background:#15181d;overflow:hidden;font-family:Segoe UI,Arial,sans-serif;color:#cdd3da;}
+  #info{position:fixed;left:10px;top:10px;color:#cdd3da;font-size:12px;background:rgba(0,0,0,.5);
+        padding:6px 10px;border-radius:6px;z-index:5;line-height:1.6;}
+  #info select,#info button{background:#1b2027;color:#cdd3da;border:1px solid #333;border-radius:4px;padding:3px 7px;font-size:12px;cursor:pointer;margin-top:4px;}
+  #err{position:fixed;left:10px;bottom:10px;right:10px;color:#ff9a9a;font-size:13px;z-index:6;white-space:pre-wrap;font-family:Consolas,monospace;}
+  canvas{display:block;}
+  #poseui{ font:12px/1.5 'Segoe UI',Arial,sans-serif; color:#e8edf3;
+           background:linear-gradient(180deg,rgba(22,27,34,.97),rgba(13,16,21,.97));
+           border:1px solid #2b333d; border-radius:10px;
+           box-shadow:0 8px 26px rgba(0,0,0,.55); }
+  #poseui *{ color:#e8edf3; }
+  #poseui button{ background:#222932; color:#dbe3ec; border:1px solid #39424e;
+           border-radius:6px; padding:5px 11px; font-size:12px; font-weight:500;
+           cursor:pointer; transition:background .12s,border-color .12s,transform .06s; }
+  #poseui button:hover{ background:#2c3540; border-color:#55708c; }
+  #poseui button:active{ transform:translateY(1px); }
+  #poseui button.on{ background:#1f4f7a; border-color:#3d8fd0; color:#fff; }
+  #poseui button.go{ background:#1f5c37; border-color:#3fa565; color:#fff; }
+  #poseui button.go:hover{ background:#256b40; }
+  #poseui button.danger{ background:#5c2626; border-color:#a04a4a; color:#fff; }
+  #poseui button.danger:hover{ background:#6b2c2c; }
+  #poseui input{ background:#0d1015; color:#e8edf3; border:1px solid #39424e;
+           border-radius:6px; padding:4px 7px; }
+  #poseui input:focus{ outline:none; border-color:#3d8fd0; }
+  #poseui input[type=range]{ accent-color:#3d8fd0; padding:0; border:0; background:none; }
+  #poseui .hint{ color:#93a0b0; }
+  #poseui .sep{ width:1px; height:20px; background:#2b333d; display:inline-block; }
+  #poseui select{ background:#dfe5ec; color:#000; border:1px solid #aab4c0;
+           border-radius:6px; padding:4px 6px; font-size:12px; }
+  #poseui select option{ color:#000; background:#fff; }
+  #poseui .keybox, #poseui .keybox *{ color:#000; }
+  #poseui .keybox button{ background:#dfe5ec; border-color:#aab4c0; color:#000; }
+  #poseui .keybox button:hover{ background:#eef2f6; border-color:#7d8b9a; }
+  #poseui .keybox select{ background:#dfe5ec; color:#000; border:1px solid #aab4c0;
+           border-radius:6px; padding:4px 6px; font-size:12px; }
+  #poseui .keybox select option{ color:#000; background:#fff; }
+</style>
+</head>
+<body>
+<div id="info">loading…</div>
+<div id="err"></div>
+<script type="importmap">
+{
+  "imports": {
+    "three": "../node_modules/three/build/three.module.js",
+    "three/addons/": "../node_modules/three/examples/jsm/"
+  }
+}
+</script>
+<script>
+const info = document.getElementById('info');
+const err = document.getElementById('err');
+function fail(e){ err.textContent = String(e && e.stack ? e.stack : e); info.textContent = 'error'; }
+
+try {
+  const fs = require('fs');
+  const path = require('path');
+  const THREE = require('three');
+
+  const argv = process.argv || [];
+  const charArg = argv.find(a => a.startsWith('--char='));
+  const scnArg = argv.find(a => a.startsWith('--scn='));
+
+  const renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setPixelRatio(window.devicePixelRatio || 1);
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  document.body.appendChild(renderer.domElement);
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x15181d);
+  const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.5, 1e6);
+  scene.add(new THREE.AmbientLight(0xffffff, 1.05));
+  const key = new THREE.DirectionalLight(0xffffff, 1.0); key.position.set(1, 2, 1.5); scene.add(key);
+  const fill = new THREE.DirectionalLight(0xffffff, 0.45); fill.position.set(-1, 0.5, -1); scene.add(fill);
+  const root = new THREE.Group();
+  scene.add(root);
+
+  const texLoader = new THREE.TextureLoader();
+  const texCache = new Map();
+  function getTex(url){
+    if(!url) return null;
+    if(texCache.has(url)) return texCache.get(url);
+    const t = texLoader.load(url);
+    if('colorSpace' in t && THREE.SRGBColorSpace) t.colorSpace = THREE.SRGBColorSpace;
+    t.wrapS = t.wrapT = THREE.RepeatWrapping;
+    t.flipY = false;
+    if(renderer.capabilities) t.anisotropy = renderer.capabilities.getMaxAnisotropy();
+    texCache.set(url, t);
+    return t;
+  }
+  function makeMat(tex, rf, name){
+    rf = rf || 0; name = (name || '').toLowerCase();
+    const cutout = (rf & 4) !== 0;
+    const additive = (rf & 32) !== 0 || name.includes('alphablend2');
+    const dark = (rf & 0x20000) !== 0;
+    const noCull = (rf & 8) !== 0;
+    const noDepth = (rf & 64) !== 0;
+    const transp = (rf & 2) !== 0 || additive || dark;
+    const mat = new THREE.MeshBasicMaterial({
+      map: tex || null, color: tex ? 0xffffff : 0xb0b8c0,
+      side: noCull ? THREE.DoubleSide : THREE.FrontSide,
+      transparent: transp,
+      blending: additive ? THREE.AdditiveBlending : dark ? THREE.MultiplyBlending : THREE.NormalBlending,
+      alphaTest: cutout ? 0.5 : (transp ? 0.0 : 0.1),
+      depthWrite: !transp && !noDepth
+    });
+    mat.userData.pass = (additive || dark) ? 2 : (rf & 2) ? 1 : 0;
+    return mat;
+  }
+
+  let center = new THREE.Vector3(0, 0, 0), radius = 100, dist = 400, yaw = 0.6, pitch = 0.3;
+  function updateCam(){
+    const cp = Math.cos(pitch), sp = Math.sin(pitch), cy = Math.cos(yaw), sy = Math.sin(yaw);
+    camera.position.set(center.x + dist*cp*sy, center.y + dist*sp, center.z + dist*cp*cy);
+    camera.lookAt(center);
+  }
+  function frameFromRoot(){
+    const box = new THREE.Box3().setFromObject(root);
+    if(!box.isEmpty()){ box.getCenter(center); const s = new THREE.Vector3(); box.getSize(s); radius = Math.max(s.x, s.y, s.z, 1) * 0.6; }
+    dist = (radius / Math.tan((camera.fov * Math.PI / 180) / 2)) * 1.9;
+    if(!isFinite(dist) || dist <= 0) dist = 400;
+    updateCam();
+  }
+  let dragging = false, px = 0, py = 0;
+  renderer.domElement.addEventListener('mousedown', e => { if(window.__poseGrab) return; dragging = true; px = e.clientX; py = e.clientY; });
+  window.addEventListener('mouseup', () => dragging = false);
+  window.addEventListener('mousemove', e => { if(!dragging) return; yaw -= (e.clientX-px)*0.01; pitch += (e.clientY-py)*0.01; pitch = Math.max(-1.4, Math.min(1.4, pitch)); px = e.clientX; py = e.clientY; updateCam(); });
+  renderer.domElement.addEventListener('wheel', e => { e.preventDefault(); dist *= (1 + Math.sign(e.deltaY)*0.1); dist = Math.max(radius*0.03, dist); updateCam(); }, { passive: false });
+  window.addEventListener('resize', () => { camera.aspect = window.innerWidth/window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight); });
+
+  if(charArg){
+    const { loadCharacter, pieceTextureKey } = require('../src/engine/loader');
+    const { assembleCharacter } = require('../src/engine/scn_character');
+    const [charDir, gender] = charArg.slice('--char='.length).split('|');
+    let CH = loadCharacter(charDir, gender || 'male');
+    root.scale.z = -1;
+
+    const grid = new THREE.GridHelper(500, 16, 0x2a3440, 0x1c242c); scene.add(grid);
+    let meshes = [];
+    function build(pose){
+      for(const m of meshes){ root.remove(m); m.geometry.dispose(); }
+      meshes = [];
+      const pieces = assembleCharacter(CH.skel, CH.parts, pose);
+      for(const pc of pieces){
+        if(!pc.positions.length || !pc.indices.length) continue;
+        const g = new THREE.BufferGeometry();
+        g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(pc.positions), 3));
+        if(pc.uvs && pc.uvs.length === (pc.positions.length/3)*2) g.setAttribute('uv', new THREE.Float32BufferAttribute(pc.uvs, 2));
+        g.setIndex(pc.indices); g.computeVertexNormals();
+        const tex = getTex(CH.textures[pieceTextureKey(pc.dir, pc.texture)]);
+        const mesh = new THREE.Mesh(g, makeMat(tex, pc.renderFlag));
+        mesh.renderOrder = mesh.material.userData.pass * 10000 + meshes.length;
+        root.add(mesh); meshes.push(mesh);
+      }
+      frameFromRoot();
+    }
+    function updatePose(pose){
+      const pieces = assembleCharacter(CH.skel, CH.parts, pose);
+      for(let i = 0; i < meshes.length && i < pieces.length; i++){
+        const attr = meshes[i].geometry.getAttribute('position');
+        attr.array.set(pieces[i].positions); attr.needsUpdate = true;
+        meshes[i].geometry.computeVertexNormals();
+      }
+    }
+
+    let clipIdx = CH.animNames.indexOf('00008'); if(clipIdx < 0) clipIdx = Math.min(1, CH.animNames.length - 1);
+    let paused = false, tMs = 0, lastNow = performance.now(), speed = 1;
+    // clip -> readable name, pulled out of the actor state scripts
+    let animNames = null, clipSelect = null;
+    const labelForClip = n => {
+      const hit = animNames && animNames[n];
+      const label = typeof hit === 'string' ? hit : (hit && hit.label);
+      return label ? n + '  -  ' + label : n;
+    };
+    // the names are baked in, parsed once from the actor state scripts
+    try { animNames = require('../src/data/animNames.json').names; } catch (e) {}
+    function applyAnimNames(index, fileCount) {
+      animNames = Object.assign({}, animNames, index.names);
+      if (clipSelect) {
+        [...clipSelect.options].forEach(o => { o.textContent = labelForClip(CH.animNames[Number(o.value)]); });
+      }
+      const named = CH.animNames.filter(n => labelForClip(n) !== n).length;
+      const hud = document.getElementById('animnames');
+      if (hud) hud.textContent = named + ' of ' + CH.animNames.length + ' clips named';
+      return index.clips + ' clips named from ' + fileCount + ' scripts';
+    }
+    const cur = () => CH.animNames[clipIdx] || CH.animNames[0] || 'BASE';
+    function clipDuration(){
+      let d = 0;
+      for(const b of CH.skel.bones) for(const a of (b.anims||[])) if(a.name === cur() && a.duration > d) d = a.duration;
+      return d || 1000;
+    }
+    function ui(){
+      info.innerHTML = `${gender} · ${CH.skel.bones.length} bones · ${CH.animNames.length} clips<br>`;
+      const sel = document.createElement('select');
+      clipSelect = sel;
+      const filter = document.createElement('input');
+      filter.placeholder = 'filter clips';
+      filter.style.cssText = 'width:150px;color:#000;margin-right:4px;';
+      // matching on the label as it is drawn means "dodge", "00016" and
+      // "machinegun" all find something, without a second index
+      const fill = () => {
+        const q = filter.value.trim().toLowerCase();
+        sel.innerHTML = '';
+        CH.animNames.forEach((n, i) => {
+          const text = labelForClip(n);
+          if (q && !text.toLowerCase().includes(q)) return;
+          const o = document.createElement('option'); o.value = i; o.textContent = text; sel.appendChild(o);
+        });
+        // keep showing the clip that is playing even when it is filtered out
+        if (!sel.querySelector('option[value="' + clipIdx + '"]')) {
+          const o = document.createElement('option');
+          o.value = clipIdx; o.textContent = labelForClip(cur()); sel.insertBefore(o, sel.firstChild);
+        }
+        sel.value = clipIdx;
+        filter.title = sel.options.length + ' of ' + CH.animNames.length;
+      };
+      filter.oninput = fill;
+      fill();
+      sel.onchange = () => { clipIdx = Number(sel.value); tMs = 0; };
+      const mk = (t, fn) => { const b = document.createElement('button'); b.textContent = t; b.onclick = fn; return b; };
+      info.appendChild(filter);
+      info.appendChild(mk('◀', () => { clipIdx = (clipIdx-1+CH.animNames.length)%CH.animNames.length; fill(); tMs = 0; }));
+      info.appendChild(sel);
+      info.appendChild(mk('▶', () => { clipIdx = (clipIdx+1)%CH.animNames.length; fill(); tMs = 0; }));
+      info.appendChild(mk('⏯', () => { paused = !paused; }));
+      // playback speed: the eye needs a run slowed down to see what the feet do
+      const sp = document.createElement('input');
+      sp.type = 'range'; sp.min = 0.05; sp.max = 3; sp.step = 0.05; sp.value = speed;
+      sp.style.cssText = 'width:90px;vertical-align:middle;margin-left:6px;';
+      sp.title = 'playback speed, double click to reset';
+      const spOut = document.createElement('span');
+      spOut.style.cssText = 'color:#93a0b0;font-family:Consolas,monospace;';
+      const showSpeed = () => { spOut.textContent = speed.toFixed(2) + 'x'; sp.value = speed; window.__speed = speed; };
+      window.__showSpeed = showSpeed;
+      sp.oninput = () => { speed = Number(sp.value); showSpeed(); };
+      sp.ondblclick = () => { speed = 1; showSpeed(); };
+      showSpeed();
+      info.appendChild(sp);
+      info.appendChild(spOut);
+      const hint = document.createElement('div'); hint.style.cssText='color:#7c8794;margin-top:4px;'; hint.textContent='drag rotate · wheel zoom · space pause · slider = speed'; info.appendChild(hint);
+      const named = document.createElement('div'); named.id = 'animnames';
+      named.style.cssText = 'color:#7c8794;'; info.appendChild(named);
+    }
+    window.addEventListener('keydown', e => { if(e.key === ' '){ paused = !paused; e.preventDefault(); } });
+
+    function mountPoseEditor(){
+      const { createPoseEditor } = require('./pose_editor');
+      const ed = createPoseEditor({
+        THREE, scene, camera, renderer, CH, charDir, gender: gender || 'male',
+        getClip: cur, getTime: () => tMs, getDuration: clipDuration,
+        onPoseChanged: () => updatePose({ clipA: cur(), tickA: Math.floor(tMs) }),
+      });
+      ed.buildMarkers(radius);
+      ed.setRange(0, clipDuration());
+
+      const box = document.createElement('div');
+      box.id = 'poseui';
+      box.style.cssText = 'position:fixed;left:10px;bottom:10px;right:10px;' +
+        'padding:9px 13px;z-index:7;';
+      box.innerHTML =
+        '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">' +
+        '<b style="color:#37c8ff">Pose</b>' +
+        '<label>t <input id="pe_t" type="range" min="0" max="1000" value="0" style="width:220px;vertical-align:middle"></label>' +
+        '<span id="pe_time" class="hint" style="font-family:Consolas,monospace">0 ms</span>' +
+        '<span class="sep"></span>' +
+        '<label class="keybox"><span class="hint" style="color:#93a0b0">key </span>' +
+        '<button id="pe_prevkey" title="previous key">&#9664;</button>' +
+        '<select id="pe_key" style="min-width:118px"></select>' +
+        '<button id="pe_nextkey" title="next key">&#9654;</button></label>' +
+        '<label>from <input id="pe_from" type="number" style="width:70px"></label>' +
+        '<label>to <input id="pe_to" type="number" style="width:70px"></label>' +
+        '<button id="pe_all">whole clip</button>' +
+        '<button id="pe_here">this tick only</button>' +
+        '<button id="pe_mixamo">load (.fbx/.bmap/.lua)...</button>' +
+        '<button id="pe_bones">bones...</button>' +
+        '<button id="pe_mirror" title="if the animation plays reversed">mirror</button>' +
+        '<label class="hint">axis <select id="pe_orient">' +
+        ['flipZ','none','flipX','flipY','swapXZ','rotY90','rotY180','rotY270','rotX90','rotX180','rotZ90','rotZ180']
+          .map(o => '<option value="' + o + '">' + o + (o === 'flipZ' ? ' (default)' : '') + '</option>').join('') +
+        '</select></label>' +
+        '<label class="hint">how <select id="pe_method">' +
+        '<option value="direction">point like source</option>' +
+        '<option value="rotation">copy rotations</option></select></label>' +
+        '<label class="hint">use <input id="pe_srcfrom" type="number" step="0.05" min="0" style="width:58px" title="from, seconds into the loaded animation"></label>' +
+        '<label class="hint">to <input id="pe_srcto" type="number" step="0.05" min="0" style="width:58px" title="to, seconds - blank means the end"></label>' +
+        '<span id="pe_srclen" class="hint"></span>' +
+        '<label class="hint">time <select id="pe_timemode">' +
+        '<option value="fit">fit to clip</option>' +
+        '<option value="loop">loop</option>' +
+        '<option value="none">once</option></select></label>' +
+        '<span class="sep"></span>' +
+        '<button id="pe_whole">edit whole line</button>' +
+        '<label class="hint">chain <input id="pe_chainlen" type="number" min="2" max="12" value="4" style="width:46px"></label>' +
+        '<span class="sep"></span>' +
+        '<button id="pe_addbone">+ bone</button>' +
+        '<button id="pe_delbone">- bone</button>' +
+        '<button id="pe_sel">select</button>' +
+        '<button id="pe_join">join selection</button>' +
+        '<button id="pe_link">link</button>' +
+        '<button id="pe_delsel" class="danger">delete selected</button>' +
+        '<button id="pe_undolink">undo re-links</button>' +
+        '<button id="pe_discard" class="danger">discard edits</button>' +
+        '<button id="pe_chain">chain all</button>' +
+        '<button id="pe_bakespeed" title="write the preview speed into the clip">bake speed</button>' +
+        '<button id="pe_save" class="go">Save</button>' +
+        '<span id="pe_msg" style="color:#9aa4b2"></span>' +
+        '</div>' +
+        '<div style="color:#7c8794;margin-top:5px">drag a blue sphere or a bone line, the parent rotates to follow ' +
+        '&middot; written into the keys inside the range &middot; nothing touches disk until Save</div>';
+      document.body.appendChild(box);
+
+      const $t = box.querySelector('#pe_t'), $time = box.querySelector('#pe_time');
+      const $from = box.querySelector('#pe_from'), $to = box.querySelector('#pe_to');
+      const $msg = box.querySelector('#pe_msg');
+      ed.setReporter(m => { $msg.textContent = m; });
+
+      // Frame picker. The list holds the clip's real keys, and picking one jumps
+      // there, pauses, and narrows the range to that single key - which is what
+      // "edit this frame and only this frame" means.
+      const $key = box.querySelector('#pe_key');
+      let keyClip = null;
+
+      const fillKeys = () => {
+        const ticks = ed.keyTicks();
+        keyClip = cur();
+        $key.innerHTML = ticks.length
+          ? ticks.map((t, i) => '<option value="' + t + '">' + (i + 1) + '/' + ticks.length + '  ' + t + ' ms</option>').join('')
+          : '<option value="">no keys</option>';
+      };
+
+      const gotoKey = tick => {
+        paused = true;
+        tMs = tick;
+        $from.value = tick; $to.value = tick;
+        syncRange();
+        $msg.textContent = 'key at ' + tick + ' ms, range narrowed to this key only';
+      };
+
+      $key.onchange = () => { if ($key.value !== '') gotoKey(Number($key.value)); };
+      const stepKey = dir => {
+        const ticks = ed.keyTicks();
+        if (!ticks.length) return;
+        const i = Math.max(0, Math.min(ticks.length - 1, ed.keyIndexAt(tMs) + dir));
+        $key.value = String(ticks[i]);
+        gotoKey(ticks[i]);
+      };
+      box.querySelector('#pe_prevkey').onclick = () => stepKey(-1);
+      box.querySelector('#pe_nextkey').onclick = () => stepKey(1);
+
+      const syncRange = () => {
+        const f = Number($from.value) || 0, t = Number($to.value) || 0;
+        ed.setRange(Math.min(f, t), Math.max(f, t));
+      };
+      $from.value = 0; $to.value = Math.round(clipDuration());
+      $from.onchange = syncRange; $to.onchange = syncRange;
+      fillKeys();
+      $t.oninput = () => { paused = true; tMs = clipDuration() * (Number($t.value) / 1000); };
+      box.querySelector('#pe_all').onclick = () => { $from.value = 0; $to.value = Math.round(clipDuration()); syncRange(); };
+      box.querySelector('#pe_here').onclick = () => { $from.value = Math.round(tMs); $to.value = Math.round(tMs); syncRange(); };
+      box.querySelector('#pe_save').onclick = async () => {
+        const r = ed.save();
+        $msg.textContent = r.msg;
+        if (r.pending) {
+          const c = await ed.commitToResource(r.patched);
+          $msg.textContent = c.msg;
+        }
+        const ub = ed.saveUserBones();
+        if (ed.userBoneCount()) $msg.textContent += ' · ' + ub.msg;
+      };
+
+      let addMode = 0;   // 0 off, 1 add, 2 delete
+      const bAdd = box.querySelector('#pe_addbone'), bDel = box.querySelector('#pe_delbone');
+      const paintModes = () => {
+        const set = (sel, on) => { const el = box.querySelector(sel); if (el) el.classList.toggle('on', on); };
+        set('#pe_addbone', addMode === 1);
+        set('#pe_delbone', addMode === 2);
+        set('#pe_link', addMode === 3);
+        set('#pe_sel', addMode === 4);
+      };
+      bAdd.onclick = () => { addMode = addMode === 1 ? 0 : 1; paintModes();
+        $msg.textContent = addMode ? 'click the model to drop a bone, parented to the nearest one' : ''; };
+      bDel.onclick = () => { addMode = addMode === 2 ? 0 : 2; linkFrom = null; paintModes();
+        $msg.textContent = addMode ? 'click near a green bone to delete it' : ''; };
+
+      const bLink = box.querySelector('#pe_link');
+      let linkFrom = null;
+      bLink.onclick = () => {
+        addMode = addMode === 3 ? 0 : 3; linkFrom = null; paintModes();
+        $msg.textContent = addMode ? 'click YOUR bone, then the bone it should hang off' : '';
+      };
+      box.querySelector('#pe_chain').onclick = () => { $msg.textContent = ed.chainUserBones().msg; };
+
+      const bSel = box.querySelector('#pe_sel');
+      bSel.onclick = () => {
+        addMode = addMode === 4 ? 0 : 4; linkFrom = null; paintModes();
+        if (!addMode) ed.clearMultiSelection();
+        $msg.textContent = addMode ? 'click each bone, the LAST one becomes the parent' : '';
+      };
+      box.querySelector('#pe_join').onclick = () => {
+        $msg.textContent = ed.joinSelection().msg;
+      };
+      box.querySelector('#pe_undolink').onclick = () => {
+        $msg.textContent = ed.resetReparents().msg;
+      };
+      // Retarget: pick a Mixamo animation exported to JSON and lay it over the
+      // current clip. Uses a hidden file input, this window has no dialog IPC.
+      const filePick = document.createElement('input');
+      filePick.type = 'file';
+      filePick.accept = '.json,.fbx,.bmap,.lua';
+      filePick.multiple = true;
+      filePick.style.display = 'none';
+      document.body.appendChild(filePick);
+      filePick.onchange = async () => {
+        const picked = [...(filePick.files || [])];
+        filePick.value = '';
+        if (!picked.length) return;
+
+        // a pile of .lua is the actor state scripts: read them for clip names
+        const luas = picked.filter(x => /\.lua$/i.test(x.name));
+        if (luas.length) {
+          const { buildAnimNames } = require('../src/utils/animNames');
+          const files = [];
+          for (const l of luas) files.push({ name: l.name, text: await l.text() });
+          $msg.textContent = applyAnimNames(buildAnimNames(files), files.length);
+          return;
+        }
+
+        const f = picked[0];
+        if (!f) return;
+        $msg.textContent = 'reading ' + f.name + ' ...';
+        try {
+          if (/\.bmap$/i.test(f.name)) {
+            $msg.textContent = ed.loadBoneMap(await f.text(), f.name).msg;
+            return;
+          }
+          if (/\.fbx$/i.test(f.name)) {
+            const { FBXLoader } = await import('three/addons/loaders/FBXLoader.js');
+            const { clipToTracks, bindFromObject } = require('../src/utils/fbxTracks');
+            const group = new FBXLoader().parse(await f.arrayBuffer(), '');
+            const clips = group.animations || [];
+            if (!clips.length) { $msg.textContent = f.name + ' has no animation in it'; return; }
+            const conv = clipToTracks(clips[0]);
+            if (!conv.ok) { $msg.textContent = conv.error; return; }
+            conv.bind = bindFromObject(group);      // rest pose, needed to retarget
+            if (!conv.bind.length) { $msg.textContent = f.name + ' has no skeleton, only an animation'; return; }
+            showSource(ed.retargetMixamo(JSON.stringify(conv), f.name));
+            return;
+          }
+          showSource(ed.retargetMixamo(await f.text(), f.name));
+        } catch (e) {
+          $msg.textContent = 'error reading file: ' + e.message;
+        }
+      };
+      box.querySelector('#pe_mixamo').onclick = () => filePick.click();
+
+      // Every one of these options changes the result, and the file is still in
+      // memory, so re-run it instead of telling the user to pick it again.
+      const $srcFrom = box.querySelector('#pe_srcfrom'), $srcTo = box.querySelector('#pe_srcto');
+      const $srcLen = box.querySelector('#pe_srclen');
+      function reapply(why) {
+        if (!ed.hasSource()) { $msg.textContent = why + ' - load an animation to see it'; return; }
+        showSource(ed.retargetMixamo(null));
+      }
+      function showSource(res) {
+        $msg.textContent = res.msg;
+        if (!res.ok || !res.sourceMs) return;
+        const secs = res.sourceMs / 4800;
+        $srcLen.textContent = 'source is ' + secs.toFixed(2) + 's';
+        $srcFrom.max = $srcTo.max = secs.toFixed(2);
+        if ($srcTo.value === '') $srcTo.value = secs.toFixed(2);
+      }
+      const onRange = () => {
+        const a = parseFloat($srcFrom.value) || 0, b = parseFloat($srcTo.value) || 0;
+        if (b && b <= a) { $msg.textContent = 'the end has to come after the start'; return; }
+        ed.setSourceRange(a * 4800, b * 4800);
+        reapply('using ' + a.toFixed(2) + '-' + (b ? b.toFixed(2) : 'end') + 's');
+      };
+      $srcFrom.onchange = onRange; $srcTo.onchange = onRange;
+      // ---------------------------------------------------------- bone panel
+      // Shows what maps onto what, because a retarget that looks wrong is
+      // almost always a pairing you cannot see. Rows can be switched off, and
+      // the whole thing can be mirrored when left and right come out swapped.
+      let bonePanel = null;
+
+      function buildBonePanel() {
+        if (bonePanel) { bonePanel.remove(); bonePanel = null; return; }
+        const rows = ed.mappingRows();
+        if (!rows.length) {
+          $msg.textContent = 'load an animation first, then the pairing shows up here';
+          return;
+        }
+
+        bonePanel = document.createElement('div');
+        bonePanel.id = 'bonepanel';
+        bonePanel.style.cssText =
+          'position:fixed;right:14px;top:14px;bottom:120px;width:390px;z-index:9;overflow:auto;' +
+          'background:linear-gradient(180deg,rgba(22,27,34,.98),rgba(13,16,21,.98));' +
+          'border:1px solid #2b333d;border-radius:10px;box-shadow:0 8px 26px rgba(0,0,0,.55);' +
+          'padding:10px 12px;font:12px/1.5 "Segoe UI",Arial,sans-serif;color:#e8edf3';
+
+        const head = document.createElement('div');
+        head.style.cssText = 'display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:8px';
+        head.innerHTML = '<b style="color:#37c8ff">Bone pairing</b>' +
+          '<span class="hint" style="color:#93a0b0">' + rows.filter(r => r.target).length + ' mapped, ' +
+          rows.filter(r => !r.target).length + ' not</span>';
+        const mirror = document.createElement('button');
+        mirror.textContent = 'swap L/R';
+        mirror.title = 'if the animation comes out mirrored';
+        mirror.onclick = () => {
+          $msg.textContent = ed.mirrorSides() ? 'left and right swapped, load the animation again'
+                                              : 'nothing to swap';
+          bonePanel.remove(); bonePanel = null; buildBonePanel();
+        };
+        const close = document.createElement('button');
+        close.textContent = 'close';
+        close.onclick = () => { bonePanel.remove(); bonePanel = null; };
+        head.appendChild(mirror);
+        head.appendChild(close);
+        bonePanel.appendChild(head);
+
+        for (const row of rows) {
+          const line = document.createElement('label');
+          line.style.cssText = 'display:flex;gap:8px;align-items:center;padding:2px 0;' +
+            (row.target ? '' : 'opacity:.45');
+          const cb = document.createElement('input');
+          cb.type = 'checkbox';
+          cb.checked = row.enabled;
+          cb.disabled = !row.target;
+          cb.onchange = () => {
+            ed.setBoneEnabled(row.source, cb.checked);
+            $msg.textContent = row.source + (cb.checked ? ' on' : ' off') + ', load the animation again';
+          };
+          const src = document.createElement('span');
+          src.textContent = row.source.replace(/^mixamorig[:_]?/i, '');
+          src.style.cssText = 'flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap';
+          const arrow = document.createElement('span');
+          arrow.textContent = '->';
+          arrow.style.color = '#5b6b7c';
+          const dst = document.createElement('span');
+          dst.textContent = row.target || '(unmapped)';
+          dst.style.cssText = 'flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;' +
+            (row.target ? 'color:#7bf58a' : 'color:#93a0b0');
+          line.appendChild(cb); line.appendChild(src); line.appendChild(arrow); line.appendChild(dst);
+          bonePanel.appendChild(line);
+        }
+        document.body.appendChild(bonePanel);
+      }
+
+      box.querySelector('#pe_bones').onclick = buildBonePanel;
+
+      const bMirror = box.querySelector('#pe_mirror');
+      bMirror.onclick = () => {
+        const on = ed.toggleMirror();
+        bMirror.classList.toggle('on', on);
+        reapply('mirror ' + (on ? 'on' : 'off'));
+      };
+      box.querySelector('#pe_orient').onchange = e => {
+        reapply('axis: ' + ed.setOrient(e.target.value));
+      };
+      box.querySelector('#pe_method').onchange = e => {
+        reapply('method: ' + ed.setMethod(e.target.value));
+      };
+      box.querySelector('#pe_timemode').onchange = e => {
+        reapply('time mode: ' + ed.setTimeMode(e.target.value));
+      };
+
+      box.querySelector('#pe_bakespeed').onclick = () => {
+        const f = window.__speed || 1;
+        if (Math.abs(f - 1) < 0.001) { $msg.textContent = 'speed is 1x, move the slider first'; return; }
+        $msg.textContent = ed.setClipSpeed(f).msg;
+        speed = 1; window.__showSpeed && window.__showSpeed();
+      };
+
+      const bWhole = box.querySelector('#pe_whole');
+      bWhole.onclick = () => {
+        const on = ed.setWholeLine(!ed.isWholeLine());
+        bWhole.classList.toggle('on', on);
+        $msg.textContent = on
+          ? 'whole line: drag any bone and the chain above it bends to follow'
+          : 'single joint: drag rotates the parent only';
+      };
+      box.querySelector('#pe_chainlen').onchange = e => {
+        $msg.textContent = 'chain length ' + ed.setChainLength(Number(e.target.value)) + ' bones';
+      };
+      box.querySelector('#pe_delsel').onclick = () => { $msg.textContent = ed.deleteSelection().msg; };
+      box.querySelector('#pe_discard').onclick = () => { $msg.textContent = ed.discardEdits().msg; };
+      paintModes();
+
+      let overUi = false;
+      box.addEventListener('pointerenter', () => { overUi = true; });
+      box.addEventListener('pointerleave', () => { overUi = false; });
+
+      renderer.domElement.addEventListener('pointerdown', e => {
+        if (overUi) return;
+        if (addMode) {
+          const r = renderer.domElement.getBoundingClientRect();
+          const nd = new THREE.Vector2(((e.clientX-r.left)/r.width)*2-1, -((e.clientY-r.top)/r.height)*2+1);
+          const rc = new THREE.Raycaster();
+          rc.setFromCamera(nd, camera);
+          let hit = rc.intersectObjects(meshes, false)[0];
+          if (!hit) {
+            // selecting: allow clicking a bone marker floating off the mesh
+            const bm = rc.intersectObjects(ed.group.children, false)[0];
+            if (bm) hit = bm;
+          }
+          if (!hit) { $msg.textContent = 'aim at the model or at a bone'; return; }
+          if (addMode === 1) ed.addBoneAt(hit.point);
+          else if (addMode === 2) ed.removeNearestUserBone(hit.point);
+          else if (addMode === 4) {
+            const n = ed.toggleSelect(hit.point);
+            const sel = ed.selectionNames();
+            $msg.textContent = sel.length
+              ? sel.length + ' selected, parent: ' + sel[sel.length - 1]
+              : 'selection empty';
+          }
+          else if (addMode === 3) {
+            if (!linkFrom) {
+              linkFrom = ed.pickUserBoneAt(hit.point);
+              $msg.textContent = linkFrom ? linkFrom + ' → now click the target bone'
+                                          : 'no bone of yours nearby, add one first';
+            } else {
+              const to = ed.pickAnyBoneAt(hit.point);
+              $msg.textContent = to ? ed.linkBone(linkFrom, to).msg : 'no target bone found';
+              linkFrom = null;
+            }
+          }
+          window.__poseGrab = true;
+          setTimeout(() => { window.__poseGrab = false; }, 0);
+          e.stopPropagation();
+          return;
+        }
+        if (ed.onDown(e)) { dragging = false; e.stopPropagation(); }
+      }, true);
+      window.addEventListener('pointermove', e => { ed.onMove(e); });
+      window.addEventListener('pointerup', () => ed.onUp());
+      window.addEventListener('keydown', e => { if (e.key === 'Escape') ed.clearSelection(); });
+
+      let lastClip = cur();
+      return {
+        sync: ed.sync,
+        isDragging: ed.isDragging,
+        refreshUi(){
+          if (cur() !== lastClip) {
+            lastClip = cur();
+            ed.resetClip();
+            $from.value = 0; $to.value = Math.round(clipDuration()); syncRange();
+          }
+          if (keyClip !== cur()) fillKeys();
+          // follow the playhead so the list always shows where you are
+          if (!ed.isDragging() && $key.options.length) {
+            const ticks = ed.keyTicks();
+            const at = ed.keyIndexAt(tMs);
+            if (at >= 0 && $key.value !== String(ticks[at])) $key.value = String(ticks[at]);
+          }
+          const d = clipDuration();
+          $time.textContent = Math.round(tMs) + ' / ' + Math.round(d) + ' ms' +
+            (ed.pendingEdits() ? '  · ' + ed.pendingEdits() + ' unsaved' : '');
+          if (!ed.isDragging()) $t.value = String(Math.round(1000 * tMs / d));
+        },
+      };
+    }
+
+    build({ clipA: cur(), tickA: 0 });
+    ui();
+
+    // Ask the tool for the clip names straight away: they come from the .lua
+    // scripts inside the resource that is already open, so nothing to pick.
+    (async () => {
+      try {
+        const resArg = (process.argv || []).find(a => a.startsWith('--res='));
+        if (!resArg) return;
+        const ipc = require('electron').ipcRenderer;
+        const r = await ipc.invoke('animNamesFromResource', { ruta: resArg.slice('--res='.length) });
+        if (r && r.ok) applyAnimNames(r, r.scripts);
+      } catch (e) { /* names are a nicety, never block the viewer on them */ }
+    })();
+    const editor = mountPoseEditor();
+    function tick(now){
+      const dt = now - lastNow; lastNow = now;
+      if(!paused && !editor.isDragging()) tMs = (tMs + dt * speed) % clipDuration();
+      updatePose({ clipA: cur(), tickA: Math.floor(tMs) });
+      editor.sync();
+      editor.refreshUi();
+      renderer.render(scene, camera);
+      requestAnimationFrame(tick);
+    }
+    requestAnimationFrame(tick);
+
+  } else {
+    let D = { name: '', meshes: [] };
+    if(scnArg){ D = JSON.parse(fs.readFileSync(scnArg.slice('--scn='.length), 'utf8')); }
+    const box = new THREE.Box3();
+    const morphs = [];
+    let drawn = 0;
+    for(const m of (D.meshes || [])){
+      if(!m.positions || !m.positions.length || !m.indices || !m.indices.length) continue;
+      const g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.Float32BufferAttribute(m.positions, 3));
+      if(m.uvs && m.uvs.length === (m.positions.length/3)*2) g.setAttribute('uv', new THREE.Float32BufferAttribute(m.uvs, 2));
+      g.setIndex(m.indices); g.computeVertexNormals(); g.computeBoundingBox();
+      if(g.boundingBox) box.union(g.boundingBox);
+      const tex = getTex(m.textureDataUrl);
+      const mesh = new THREE.Mesh(g, makeMat(tex, m.renderFlag, m.name));
+      mesh.renderOrder = mesh.material.userData.pass * 10000 + drawn;
+      root.add(mesh); drawn++;
+      const ma = (m.anims || []).find(a => a.morph && a.morph.length);
+      if(ma) morphs.push({ attr: g.getAttribute('position'), base: Float32Array.from(m.positions), keys: ma.morph, dur: ma.duration || 1 });
+    }
+    if(!box.isEmpty()){ box.getCenter(center); const s = new THREE.Vector3(); box.getSize(s); radius = Math.max(s.x, s.y, s.z, 0.001) * 0.6; }
+    dist = (radius / Math.tan((camera.fov*Math.PI/180)/2)) * 1.9; if(!isFinite(dist) || dist <= 0) dist = 5;
+    updateCam();
+    let spin = false;
+    window.addEventListener('keydown', e => { if(e.key === ' '){ spin = !spin; e.preventDefault(); } if(e.key.toLowerCase() === 'w'){ root.traverse(o => { if(o.isMesh) o.material.wireframe = !o.material.wireframe; }); } });
+    const morphInfo = morphs.length ? ` · ${morphs.length} morph anim` : '';
+    info.innerHTML = `${D.name || ''}<br>${drawn} meshes${morphInfo}<br>drag rotate · wheel zoom · space spin · W wireframe`;
+    const t0 = performance.now();
+    function tick(){
+      if(spin) root.rotation.y += 0.005;
+      if(morphs.length){
+        const tms = performance.now() - t0;
+        for(const mo of morphs){
+          const t = tms % mo.dur;
+          let k = 0; while(k + 1 < mo.keys.length && mo.keys[k + 1].tick <= t) k++;
+          const applyKey = (arr, key) => { for(const mv of key.verts){ const o = mv.index * 3; if(o + 2 < arr.length){ arr[o] = mv.pos[0]; arr[o + 1] = mv.pos[1]; arr[o + 2] = mv.pos[2]; } } };
+          const w = mo.base.slice(); applyKey(w, mo.keys[k]);
+          const k1 = mo.keys[k + 1];
+          if(k1 && k1.tick > mo.keys[k].tick){
+            const a = (t - mo.keys[k].tick) / (k1.tick - mo.keys[k].tick);
+            const w1 = mo.base.slice(); applyKey(w1, k1);
+            for(let i = 0; i < w.length; i++) w[i] += (w1[i] - w[i]) * a;
+          }
+          mo.attr.array.set(w); mo.attr.needsUpdate = true;
+        }
+      }
+      renderer.render(scene, camera); requestAnimationFrame(tick);
+    }
+    tick();
+  }
+} catch(e){ fail(e); }
+</script>
+</body>
+</html>
